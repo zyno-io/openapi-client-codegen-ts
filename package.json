@@ -1,58 +1,53 @@
 {
-  "name": "@signal24/openapi-client-codegen",
-  "type": "module",
-  "version": "2.6.2",
-  "description": "OpenAPI client generator for TypeScript apps",
-  "main": "./dist/cjs/src/client/index.cjs",
-  "module": "./dist/esm/src/client/index.js",
-  "typings": "./dist/esm/src/client/index.d.ts",
-  "bin": {
-    "generate-openapi-client": "./dist/esm/src/generator/cli.js"
-  },
-  "exports": {
-    ".": {
-      "import": "./dist/esm/src/client/index.js",
-      "require": "./dist/cjs/src/client/index.cjs",
-      "types": "./dist/esm/src/client/index.d.ts"
+    "name": "@zyno-io/openapi-client-codegen",
+    "type": "module",
+    "version": "2.7.0",
+    "description": "OpenAPI client generator for TypeScript apps",
+    "main": "./dist/cjs/src/client/index.cjs",
+    "module": "./dist/esm/src/client/index.js",
+    "typings": "./dist/esm/src/client/index.d.ts",
+    "bin": {
+        "generate-openapi-client": "./dist/esm/src/generator/cli.js"
     },
-    "./generator": {
-      "import": "./dist/esm/src/generator/index.js",
-      "require": "./dist/cjs/src/generator/index.cjs",
-      "types": "./dist/esm/src/generator/index.d.ts"
-    }
-  },
-  "browser": {
-    "@hey-api/openapi-ts": false
-  },
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "tsc -p tsconfig.client.json && tsc -p tsconfig.generator.json && tsc -p tsconfig.client.cjs.json && tsc -p tsconfig.generator.cjs.json && find dist/cjs -name '*.js' -exec sh -c 'mv \"$1\" \"${1%.js}.cjs\"' _ {} \\; && find dist/cjs -name '*.cjs' -exec sed -i '' 's/require(\"\\.\\//require(\".\\//' {} \\; && find dist/cjs -name '*.cjs' -exec sed -i '' 's/\\.js\")/\\.cjs\")/g' {} \\; && chmod +x ./dist/esm/src/generator/cli.js",
-    "build:clean": "rm -rf dist && yarn build",
-    "lint": "eslint . --ext .js,.cjs,.mjs,.ts --fix --ignore-path .gitignore",
-    "format": "prettier --write ."
-  },
-  "author": "Sean Ferguson <sean@sgnl24.com> ",
-  "license": "MIT",
-  "dependencies": {
-    "@hey-api/client-fetch": "^0.10.0",
-    "@hey-api/openapi-ts": "^0.67.3"
-  },
-  "devDependencies": {
-    "@tsconfig/node22": "*",
-    "@types/node": "^22",
-    "@typescript-eslint/eslint-plugin": "^8.32.1",
-    "@typescript-eslint/parser": "^8.32.1",
-    "eslint": "^9.26.0",
-    "eslint-config-prettier": "^10.1.5",
-    "eslint-plugin-prettier": "^5.4.0",
-    "eslint-plugin-simple-import-sort": "^12.1.1",
-    "eslint-plugin-unused-imports": "^4.1.4",
-    "prettier": "^3.5.3",
-    "ts-essentials": "^10.0.4",
-    "ts-node": "^10.9.2",
-    "tslib": "^2.8.1",
-    "type-fest": "^4.41.0",
-    "typescript": "~5.8"
-  },
-  "packageManager": "yarn@4.10.2"
+    "exports": {
+        ".": {
+            "import": "./dist/esm/src/client/index.js",
+            "require": "./dist/cjs/src/client/index.cjs",
+            "types": "./dist/esm/src/client/index.d.ts"
+        },
+        "./generator": {
+            "import": "./dist/esm/src/generator/index.js",
+            "require": "./dist/cjs/src/generator/index.cjs",
+            "types": "./dist/esm/src/generator/index.d.ts"
+        }
+    },
+    "browser": {
+        "@hey-api/openapi-ts": false
+    },
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1",
+        "build": "tsc -p tsconfig.client.json && tsc -p tsconfig.generator.json && tsc -p tsconfig.client.cjs.json && tsc -p tsconfig.generator.cjs.json && find dist/cjs -name '*.js' -exec sh -c 'mv \"$1\" \"${1%.js}.cjs\"' _ {} \\; && find dist/cjs -name '*.cjs' -exec sed -i '' 's/require(\"\\.\\//require(\".\\//' {} \\; && find dist/cjs -name '*.cjs' -exec sed -i '' 's/\\.js\")/\\.cjs\")/g' {} \\; && chmod +x ./dist/esm/src/generator/cli.js",
+        "build:clean": "rm -rf dist && yarn build",
+        "lint": "oxlint . --ext .js,.cjs,.mjs,.ts --fix --ignore-path .gitignore",
+        "format": "prettier --write ."
+    },
+    "author": "Sean Ferguson <sean@sgnl24.com> ",
+    "license": "MIT",
+    "dependencies": {
+        "@hey-api/client-fetch": "^0.13.1",
+        "@hey-api/openapi-ts": "^0.92.4"
+    },
+    "devDependencies": {
+        "@tsconfig/node22": "*",
+        "@types/node": "^25",
+        "lefthook": "^2.1.1",
+        "oxlint": "^1.47.0",
+        "prettier": "^3.8.1",
+        "ts-essentials": "^10.1.1",
+        "ts-node": "^10.9.2",
+        "tslib": "^2.8.1",
+        "type-fest": "^5.4.4",
+        "typescript": "~5.9"
+    },
+    "packageManager": "yarn@4.10.2"
 }

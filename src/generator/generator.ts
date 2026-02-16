@@ -97,12 +97,14 @@ async function generateOpenapiClientInternal(openapiYamlPath: string, outConfig:
             plugins: [
                 {
                     name: '@hey-api/typescript', // preserve default output
-                    readOnlyWriteOnlyBehavior: 'off'
                 },
                 {
                     name: '@hey-api/sdk',
-                    asClass: true,
-                    serviceNameBuilder: `${prefix}{{name}}Api`,
+                    operations: {
+                        strategy: 'byTags',
+                        methods: 'static',
+                        containerName: `${prefix}{{name}}Api`,
+                    },
                 },
                 '@hey-api/schemas', // preserve default output
                 {
