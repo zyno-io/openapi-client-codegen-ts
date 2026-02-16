@@ -1,7 +1,7 @@
 {
     "name": "@zyno-io/openapi-client-codegen",
     "type": "module",
-    "version": "2.7.0",
+    "version": "2.7.1",
     "description": "OpenAPI client generator for TypeScript apps",
     "main": "./dist/cjs/src/client/index.cjs",
     "module": "./dist/esm/src/client/index.js",

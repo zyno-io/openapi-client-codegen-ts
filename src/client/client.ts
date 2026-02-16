@@ -1,15 +1,33 @@
-import type { Client, Options, RequestResult } from '@hey-api/client-fetch';
-
 import { patchRequestOptionsForFileUpload } from './uploads.js';
 
-type OpenApiRequest = Client['request'];
-type OpenApiWrapperFn = <T extends OpenApiRequest>(options: Parameters<T>[0], fn: T) => RequestResult;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyFn = (...args: any[]) => any;
+
+export interface OpenApiClient {
+    setConfig(config: Record<string, unknown>): unknown;
+    interceptors: {
+        error: { use(fn: (body: unknown, response: Response, request: Request, options: unknown) => unknown): void };
+        request: { use(fn: (request: Request) => Request | Promise<Request>): void };
+    };
+    request: AnyFn;
+    connect: AnyFn;
+    delete: AnyFn;
+    get: AnyFn;
+    head: AnyFn;
+    options: AnyFn;
+    patch: AnyFn;
+    post: AnyFn;
+    put: AnyFn;
+    trace: AnyFn;
+}
+
+type OpenApiWrapperFn = (options: unknown, fn: AnyFn) => unknown;
 
 type IHeaders = Record<string, string | null | undefined>;
 export interface OpenApiClientOptions {
     wrapper?: OpenApiWrapperFn;
     headers?: IHeaders | ((request: Request) => IHeaders) | ((request: Request) => Promise<IHeaders>);
-    onError?: (err: Error, options: Options) => Error | null | void;
+    onError?: (err: Error, options: unknown) => Error | null | void;
 }
 
 export type OpenApiResponse<T> = {
@@ -36,7 +54,7 @@ export class OpenApiError extends Error {
     }
 }
 
-export function configureOpenApiClient(client: Client, options: OpenApiClientOptions) {
+export function configureOpenApiClient(client: OpenApiClient, options: OpenApiClientOptions) {
     client.setConfig({
         throwOnError: true
     });
