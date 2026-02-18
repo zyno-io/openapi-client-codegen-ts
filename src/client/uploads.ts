@@ -1,6 +1,6 @@
 interface RequestOptionsLike {
     body?: unknown;
-    headers?: Record<string, unknown>;
+    headers?: object;
     bodySerializer?: unknown;
 }
 

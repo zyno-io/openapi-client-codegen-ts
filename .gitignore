@@ -9,4 +9,6 @@ node_modules
 !.yarn/sdks
 !.yarn/versions
 
+test/e2e/generated
+
 .serena

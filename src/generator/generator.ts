@@ -87,7 +87,7 @@ async function generateOpenapiClientInternal(openapiYamlPath: string, outConfig:
     try {
         try {
             await rm(outPath, { recursive: true });
-        } catch (e) {
+        } catch {
             // ignore
         }
 
@@ -96,15 +96,15 @@ async function generateOpenapiClientInternal(openapiYamlPath: string, outConfig:
             output: outPath,
             plugins: [
                 {
-                    name: '@hey-api/typescript', // preserve default output
+                    name: '@hey-api/typescript' // preserve default output
                 },
                 {
                     name: '@hey-api/sdk',
                     operations: {
                         strategy: 'byTags',
                         methods: 'static',
-                        containerName: `${prefix}{{name}}Api`,
-                    },
+                        containerName: `${prefix}{{name}}Api`
+                    }
                 },
                 '@hey-api/schemas', // preserve default output
                 {

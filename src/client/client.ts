@@ -1,39 +1,15 @@
+import type { OpenApiClient, OpenApiRequestOptions, OpenApiWrapperFn, OpenApiResponse } from './types.js';
 import { patchRequestOptionsForFileUpload } from './uploads.js';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyFn = (...args: any[]) => any;
-
-export interface OpenApiClient {
-    setConfig(config: Record<string, unknown>): unknown;
-    interceptors: {
-        error: { use(fn: (body: unknown, response: Response, request: Request, options: unknown) => unknown): void };
-        request: { use(fn: (request: Request) => Request | Promise<Request>): void };
-    };
-    request: AnyFn;
-    connect: AnyFn;
-    delete: AnyFn;
-    get: AnyFn;
-    head: AnyFn;
-    options: AnyFn;
-    patch: AnyFn;
-    post: AnyFn;
-    put: AnyFn;
-    trace: AnyFn;
-}
-
-type OpenApiWrapperFn = (options: unknown, fn: AnyFn) => unknown;
+export type { OpenApiClient, OpenApiRequestOptions, OpenApiWrapperFn, OpenApiResponse };
+export type { OpenApiDataType } from './types.js';
 
 type IHeaders = Record<string, string | null | undefined>;
 export interface OpenApiClientOptions {
     wrapper?: OpenApiWrapperFn;
     headers?: IHeaders | ((request: Request) => IHeaders) | ((request: Request) => Promise<IHeaders>);
-    onError?: (err: Error, options: unknown) => Error | null | void;
+    onError?: (err: Error, options: OpenApiRequestOptions) => Error | null | void;
 }
-
-export type OpenApiResponse<T> = {
-    data: T | undefined;
-};
-export type OpenApiDataType<T> = T extends OpenApiResponse<infer U> ? NonNullable<U> : never;
 
 export function dataFrom<T>(response: OpenApiResponse<T>): T {
     return response.data!;

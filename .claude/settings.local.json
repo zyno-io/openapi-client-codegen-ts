@@ -1,10 +1,7 @@
 {
-  "permissions": {
-    "allow": [
-      "Bash(yarn build:*)",
-      "Bash(node:*)"
-    ],
-    "deny": [],
-    "ask": []
-  }
+    "permissions": {
+        "allow": ["Bash(yarn build:*)", "Bash(node:*)"],
+        "deny": [],
+        "ask": []
+    }
 }
