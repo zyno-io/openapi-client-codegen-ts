@@ -1,7 +1,7 @@
-import type { OpenApiClient, OpenApiRequestOptions, OpenApiWrapperFn, OpenApiResponse } from './types.js';
+import type { OpenApiClient, OpenApiRequestOptions, OpenApiWrapperFn, OpenApiResponse, RequestResult } from './types.js';
 import { patchRequestOptionsForFileUpload } from './uploads.js';
 
-export type { OpenApiClient, OpenApiRequestOptions, OpenApiWrapperFn, OpenApiResponse };
+export type { OpenApiClient, OpenApiRequestOptions, OpenApiWrapperFn, OpenApiResponse, RequestResult };
 export type { OpenApiDataType } from './types.js';
 
 type IHeaders = Record<string, string | null | undefined>;

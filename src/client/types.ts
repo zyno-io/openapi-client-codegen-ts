@@ -36,6 +36,10 @@ export interface OpenApiRequestOptions {
     [key: string]: unknown;
 }
 
+export type RequestResult<TData = unknown, TError = unknown, ThrowOnError extends boolean = boolean> = ThrowOnError extends true
+    ? Promise<{ data: TData; request: Request; response: Response }>
+    : Promise<({ data: TData; error: undefined } | { data: undefined; error: TError }) & { request: Request; response: Response }>;
+
 export interface OpenApiClient {
     setConfig(config: Record<string, unknown>): unknown;
     getConfig(): unknown;
@@ -45,19 +49,19 @@ export interface OpenApiClient {
         request: { use(fn: AnyFn): number; eject(id: number | AnyFn): void };
         response: { use(fn: AnyFn): number; eject(id: number | AnyFn): void };
     };
-    request(options: OpenApiRequestOptions): Promise<unknown>;
-    connect(options: OpenApiRequestOptions): Promise<unknown>;
-    delete(options: OpenApiRequestOptions): Promise<unknown>;
-    get(options: OpenApiRequestOptions): Promise<unknown>;
-    head(options: OpenApiRequestOptions): Promise<unknown>;
-    options(options: OpenApiRequestOptions): Promise<unknown>;
-    patch(options: OpenApiRequestOptions): Promise<unknown>;
-    post(options: OpenApiRequestOptions): Promise<unknown>;
-    put(options: OpenApiRequestOptions): Promise<unknown>;
-    trace(options: OpenApiRequestOptions): Promise<unknown>;
+    request(options: OpenApiRequestOptions): RequestResult;
+    connect(options: OpenApiRequestOptions): RequestResult;
+    delete(options: OpenApiRequestOptions): RequestResult;
+    get(options: OpenApiRequestOptions): RequestResult;
+    head(options: OpenApiRequestOptions): RequestResult;
+    options(options: OpenApiRequestOptions): RequestResult;
+    patch(options: OpenApiRequestOptions): RequestResult;
+    post(options: OpenApiRequestOptions): RequestResult;
+    put(options: OpenApiRequestOptions): RequestResult;
+    trace(options: OpenApiRequestOptions): RequestResult;
 }
 
-export type OpenApiWrapperFn = (options: OpenApiRequestOptions, fn: (options: OpenApiRequestOptions) => Promise<unknown>) => Promise<unknown>;
+export type OpenApiWrapperFn = (options: OpenApiRequestOptions, fn: (options: OpenApiRequestOptions) => RequestResult) => RequestResult;
 
 export type OpenApiResponse<T> = {
     data: T | undefined;
