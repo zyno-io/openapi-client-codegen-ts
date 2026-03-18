@@ -10,5 +10,9 @@ node_modules
 !.yarn/versions
 
 test/e2e/generated
+test/e2e/generated-filtered
+test/e2e/generated-filtered-multi
+test/e2e/generated-filtered-all
+test/e2e/generated-filtered-structure
 
 .serena
