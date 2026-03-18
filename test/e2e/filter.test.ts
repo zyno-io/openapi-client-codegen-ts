@@ -1,9 +1,7 @@
-import { describe, it, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
-
-import { parse as parseYaml } from 'yaml';
+import { describe, it, before } from 'node:test';
 
 import { generateOpenapiClient } from '../../src/generator/generator.js';
 
@@ -93,9 +91,6 @@ describe('Spec Filtering: no filter generates everything', () => {
 
 describe('Spec Filtering: preserves spec structure', () => {
     it('filtered YAML is valid and has correct structure', async () => {
-        const content = readFileSync(SPEC_PATH, 'utf8');
-        const spec = parseYaml(content);
-
         // Manually import and test the filtering by generating with a single op
         const outPath = path.join(import.meta.dirname, 'generated-filtered-structure');
         rmSync(outPath, { recursive: true, force: true });

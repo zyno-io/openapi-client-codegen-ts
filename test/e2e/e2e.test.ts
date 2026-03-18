@@ -1,11 +1,11 @@
-import { describe, it, before } from 'node:test';
 import assert from 'node:assert/strict';
-import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { existsSync, rmSync } from 'node:fs';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import path from 'node:path';
+import { describe, it, before } from 'node:test';
 
-import { generateOpenapiClient } from '../../src/generator/generator.js';
 import { configureOpenApiClient, type OpenApiClient } from '../../src/client/client.js';
+import { generateOpenapiClient } from '../../src/generator/generator.js';
 
 const SPEC_PATH = path.join(import.meta.dirname, 'petstore.yaml');
 const OUT_PATH = path.join(import.meta.dirname, 'generated');

@@ -1,28 +1,37 @@
 {
     "name": "@zyno-io/openapi-client-codegen",
-    "type": "module",
     "version": "2.7.3",
     "description": "OpenAPI client generator for TypeScript apps",
-    "main": "./dist/cjs/src/client/index.cjs",
-    "module": "./dist/esm/src/client/index.js",
-    "typings": "./dist/esm/src/client/index.d.ts",
+    "license": "MIT",
+    "author": {
+        "name": "Zyno Consulting",
+        "email": "support@zyno.io",
+        "url": "https://zyno.io"
+    },
+    "repository": {
+        "url": "https://github.com/zyno-io/openapi-client-codegen-ts"
+    },
     "bin": {
         "generate-openapi-client": "./dist/esm/src/generator/cli.js"
     },
-    "exports": {
-        ".": {
-            "import": "./dist/esm/src/client/index.js",
-            "require": "./dist/cjs/src/client/index.cjs",
-            "types": "./dist/esm/src/client/index.d.ts"
-        },
-        "./generator": {
-            "import": "./dist/esm/src/generator/index.js",
-            "require": "./dist/cjs/src/generator/index.cjs",
-            "types": "./dist/esm/src/generator/index.d.ts"
-        }
-    },
+    "type": "module",
+    "main": "./dist/cjs/src/client/index.cjs",
+    "module": "./dist/esm/src/client/index.js",
     "browser": {
         "@hey-api/openapi-ts": false
+    },
+    "typings": "./dist/esm/src/client/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/esm/src/client/index.d.ts",
+            "import": "./dist/esm/src/client/index.js",
+            "require": "./dist/cjs/src/client/index.cjs"
+        },
+        "./generator": {
+            "types": "./dist/esm/src/generator/index.d.ts",
+            "import": "./dist/esm/src/generator/index.js",
+            "require": "./dist/cjs/src/generator/index.cjs"
+        }
     },
     "scripts": {
         "test": "tsx test/e2e/e2e.test.ts && tsx test/e2e/filter.test.ts",
@@ -32,15 +41,6 @@
         "lint": "oxlint --fix --fix-suggestions --fix-dangerously",
         "format": "oxfmt"
     },
-    "author": {
-        "name": "Zyno Consulting",
-        "email": "support@zyno.io",
-        "url": "https://zyno.io"
-    },
-    "repository": {
-        "url": "https://github.com/zyno-io/openapi-client-codegen-ts"
-    },
-    "license": "MIT",
     "dependencies": {
         "@hey-api/openapi-ts": "^0.92.4",
         "yaml": "^2.8.2"

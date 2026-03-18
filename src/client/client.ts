@@ -1,4 +1,5 @@
 import type { OpenApiClient, OpenApiRequestOptions, OpenApiWrapperFn, OpenApiResponse, RequestResult } from './types.js';
+
 import { patchRequestOptionsForFileUpload } from './uploads.js';
 
 export type { OpenApiClient, OpenApiRequestOptions, OpenApiWrapperFn, OpenApiResponse, RequestResult };

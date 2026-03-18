@@ -1,10 +1,9 @@
+import * as OpenAPI from '@hey-api/openapi-ts';
 import { createHash } from 'node:crypto';
 import { copyFileSync, existsSync, mkdtempSync, readFileSync, watch, writeFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-
-import * as OpenAPI from '@hey-api/openapi-ts';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 
 const DEFAULT_OUT_PATH = './src/openapi-client-generated';
@@ -138,7 +137,9 @@ async function generateOpenapiClientInternal(openapiYamlPath: string, outConfig:
             copyFileSync(copySource, overridesInverseMap[openapiYamlPath]);
         }
 
-        console.log(`[${new Date().toISOString()}] Generated client from ${openapiYamlPath} to ${outPath}/ (${operations?.length ? `${operations.length} operations` : 'all operations'})`);
+        console.log(
+            `[${new Date().toISOString()}] Generated client from ${openapiYamlPath} to ${outPath}/ (${operations?.length ? `${operations.length} operations` : 'all operations'})`
+        );
     } catch (err) {
         console.error(`[${new Date().toISOString()}] Error generating client from ${openapiYamlPath}:`, err);
     }
@@ -175,9 +176,7 @@ function loadOverridesMap() {
     try {
         const overridesContent = readFileSync('./openapi-specs.dev.json', 'utf8');
         overridesMap = JSON.parse(overridesContent);
-        overridesInverseMap = Object.fromEntries(
-            Object.entries(overridesMap!).map(([k, v]) => [typeof v === 'string' ? v : v.src, k])
-        );
+        overridesInverseMap = Object.fromEntries(Object.entries(overridesMap!).map(([k, v]) => [typeof v === 'string' ? v : v.src, k]));
     } catch (e) {
         console.error('Failed to load openapi-specs.dev.json:', e);
     }

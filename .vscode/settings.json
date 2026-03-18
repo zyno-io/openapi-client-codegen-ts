@@ -4,7 +4,8 @@
     },
     "typescript.tsdk": "node_modules/typescript/lib",
     "editor.formatOnSave": true,
-    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.defaultFormatter": "oxc.oxc-vscode",
+    "oxc.fmt.configPath": ".oxfmtrc.json",
     "search.exclude": {
         "dist": true
     }
