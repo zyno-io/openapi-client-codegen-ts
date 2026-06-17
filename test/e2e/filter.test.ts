@@ -89,6 +89,29 @@ describe('Spec Filtering: no filter generates everything', () => {
     });
 });
 
+describe('Spec Filtering: operations via IGeneratorConfig', () => {
+    const outPath = path.join(import.meta.dirname, 'generated-filtered-config');
+
+    before(async () => {
+        rmSync(outPath, { recursive: true, force: true });
+        await generateOpenapiClient(SPEC_PATH, { path: outPath, operations: ['listPets'] });
+    });
+
+    it('only includes the specified operation in the SDK', () => {
+        const sdk = readFileSync(path.join(outPath, 'sdk.gen.ts'), 'utf8');
+        assert.ok(sdk.includes('listPets'), 'should include listPets');
+        assert.ok(!sdk.includes('createPet'), 'should not include createPet');
+        assert.ok(!sdk.includes('getPet'), 'should not include getPet');
+    });
+
+    it('excludes schemas only used by filtered-out operations', () => {
+        const types = readFileSync(path.join(outPath, 'types.gen.ts'), 'utf8');
+        assert.ok(types.includes('Pet'), 'should include Pet');
+        assert.ok(types.includes('Owner'), 'should include Owner (transitive)');
+        assert.ok(!types.includes('CreatePetRequest'), 'should not include CreatePetRequest');
+    });
+});
+
 describe('Spec Filtering: preserves spec structure', () => {
     it('filtered YAML is valid and has correct structure', async () => {
         // Manually import and test the filtering by generating with a single op

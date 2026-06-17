@@ -3,11 +3,12 @@
     "include": ["src/client/**/*"],
     "compilerOptions": {
         "composite": true,
-        "lib": ["dom"],
+        "lib": ["dom", "es2022"],
         "noImplicitAny": true,
         "outDir": "dist/cjs",
         "module": "CommonJS",
         "moduleResolution": "Node",
+        "ignoreDeprecations": "6.0",
         "target": "ES2022"
     }
 }

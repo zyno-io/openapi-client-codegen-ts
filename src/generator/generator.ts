@@ -11,6 +11,7 @@ const DEFAULT_OUT_PATH = './src/openapi-client-generated';
 interface IGeneratorConfig {
     path: string;
     prefix?: string;
+    operations?: string[];
 }
 
 interface IOverrideConfig {
@@ -35,7 +36,7 @@ export function createWatchfulOpenapiClientGenerators() {
 export function createWatchfulOpenapiClientGenerator(openapiYamlPath: string, outConfig: string | IGeneratorConfig) {
     const override = overridesMap?.[openapiYamlPath];
     const resolvedPath = resolveOverrideSrc(override) ?? openapiYamlPath;
-    const operations = resolveOverrideOperations(override);
+    const operations = resolveOperations(outConfig, override);
 
     if (!existsSync(resolvedPath)) {
         console.log(`OpenAPI YAML file not found: ${resolvedPath}`);
@@ -67,7 +68,7 @@ export async function generateConfiguredOpenapiClients() {
     for (const [openapiYamlPath, outConfig] of Object.entries(generatorMap)) {
         const override = overridesMap?.[openapiYamlPath];
         const resolvedPath = resolveOverrideSrc(override) ?? openapiYamlPath;
-        const operations = resolveOverrideOperations(override);
+        const operations = resolveOperations(outConfig, override);
         await generateOpenapiClient(resolvedPath, outConfig, operations);
     }
 }
@@ -85,6 +86,7 @@ export async function generateOpenapiClient(openapiYamlPath: string, outConfig: 
 async function generateOpenapiClientInternal(openapiYamlPath: string, outConfig: string | IGeneratorConfig, operations?: string[]) {
     const prefix = typeof outConfig === 'string' ? '' : (outConfig.prefix ?? '');
     const outPath = typeof outConfig === 'string' ? outConfig : outConfig.path;
+    operations = operations ?? resolveGeneratorOperations(outConfig);
 
     const yaml = readFileSync(openapiYamlPath, 'utf8');
     const hashParts = [yaml, outPath, ...(operations ?? [])];
@@ -190,6 +192,15 @@ function resolveOverrideSrc(override: string | IOverrideConfig | undefined): str
 function resolveOverrideOperations(override: string | IOverrideConfig | undefined): string[] | undefined {
     if (!override || typeof override === 'string') return undefined;
     return override.operations;
+}
+
+function resolveGeneratorOperations(config: string | IGeneratorConfig): string[] | undefined {
+    if (typeof config === 'string') return undefined;
+    return config.operations;
+}
+
+function resolveOperations(config: string | IGeneratorConfig, override: string | IOverrideConfig | undefined): string[] | undefined {
+    return resolveOverrideOperations(override) ?? resolveGeneratorOperations(config);
 }
 
 /**

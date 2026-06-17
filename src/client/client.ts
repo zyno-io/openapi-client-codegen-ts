@@ -23,9 +23,10 @@ export async function dataFromAsync<T>(promise: Promise<OpenApiResponse<T>>): Pr
 export class OpenApiError extends Error {
     constructor(
         message: string,
-        public readonly request: Request,
-        public readonly response: Response,
-        public readonly body: unknown
+        public readonly request: Request | undefined,
+        public readonly response: Response | undefined,
+        public readonly body: unknown | undefined,
+        public readonly cause?: Error
     ) {
         super(message);
     }
@@ -36,9 +37,15 @@ export function configureOpenApiClient(client: OpenApiClient, options: OpenApiCl
         throwOnError: true
     });
 
-    client.interceptors.error.use((body, response, request, opts) => {
-        const message = getMessageFromBody(body, response);
-        const err = new OpenApiError(message, request, response, body);
+    client.interceptors.error.use((bodyOrErr, response, request, opts) => {
+        const message = getMessageFromBodyOrErr(bodyOrErr, response);
+        const err = new OpenApiError(
+            message,
+            request,
+            response,
+            bodyOrErr instanceof Error ? undefined : bodyOrErr,
+            bodyOrErr instanceof Error ? bodyOrErr : undefined
+        );
 
         if (options.onError) {
             const handlerResult = options.onError(err, opts);
@@ -91,12 +98,15 @@ export function configureOpenApiClient(client: OpenApiClient, options: OpenApiCl
     client.trace = options => request({ ...options, method: 'TRACE' });
 }
 
-function getMessageFromBody(body: unknown, response: Response): string {
-    if (body && typeof body === 'object') {
-        if ('error' in body && typeof body.error === 'string') {
-            return `${body.error} (${response.status})`;
-        }
-        return JSON.stringify(body);
+function getMessageFromBodyOrErr(bodyOrErr: unknown, response: Response): string {
+    if (!response && bodyOrErr instanceof Error) {
+        return `${bodyOrErr.name}: ${bodyOrErr.message}`;
     }
-    return String(body);
+    if (bodyOrErr && typeof bodyOrErr === 'object') {
+        if ('error' in bodyOrErr && typeof bodyOrErr.error === 'string') {
+            return `${bodyOrErr.error} (${response.status})`;
+        }
+        return JSON.stringify(bodyOrErr);
+    }
+    return String(bodyOrErr);
 }
