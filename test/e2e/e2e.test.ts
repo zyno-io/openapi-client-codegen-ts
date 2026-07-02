@@ -5,6 +5,7 @@ import path from 'node:path';
 import { describe, it, before } from 'node:test';
 
 import { configureOpenApiClient, type OpenApiClient } from '../../src/client/client.js';
+import { patchRequestOptionsForFileUpload } from '../../src/client/uploads.js';
 import { generateOpenapiClient } from '../../src/generator/generator.js';
 
 const SPEC_PATH = path.join(import.meta.dirname, 'petstore.yaml');
@@ -46,6 +47,45 @@ describe('E2E: OpenAPI Client Codegen', () => {
         configureOpenApiClient(client, {
             headers: { 'X-Test': 'value' },
             onError: () => null
+        });
+    });
+
+    it('converts native Blob and File values to Deepkit multipart payloads', async () => {
+        const blob = new Blob(['blob-content'], { type: 'text/plain' });
+        const file = new File(['file-content'], 'file.txt', { type: 'text/plain' });
+        const result = patchRequestOptionsForFileUpload({
+            body: {
+                title: 'Q4 Report',
+                missingAttachment: null,
+                blob,
+                file
+            },
+            headers: {
+                'content-type': 'application/json'
+            },
+            bodySerializer: () => 'serialized'
+        });
+
+        assert.ok(result.body instanceof FormData);
+        assert.equal(result.headers['content-type'], null);
+        assert.equal(result.bodySerializer, undefined);
+
+        const formData = result.body as unknown as FormData;
+        const blobPart = formData.get('blob');
+        const filePart = formData.get('file');
+        const payloadPart = formData.get('_payload');
+
+        if (!(blobPart instanceof Blob)) assert.fail('Expected blob part to be a Blob');
+        assert.equal(await blobPart.text(), 'blob-content');
+
+        if (!(filePart instanceof File)) assert.fail('Expected file part to be a File');
+        assert.equal(filePart.name, 'file.txt');
+        assert.equal(await filePart.text(), 'file-content');
+
+        if (typeof payloadPart !== 'string') assert.fail('Expected _payload part to be a string');
+        assert.deepEqual(JSON.parse(payloadPart), {
+            title: 'Q4 Report',
+            missingAttachment: null
         });
     });
 

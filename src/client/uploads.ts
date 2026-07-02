@@ -31,21 +31,32 @@ export class ReactNativeFileUploadRequest extends BaseUploadRequest {
     }
 }
 
+function isNativeFileUpload(value: unknown): value is Blob | File {
+    return typeof Blob !== 'undefined' && value instanceof Blob;
+}
+
+function isFileUpload(value: unknown): value is BaseUploadRequest | Blob | File {
+    return value instanceof BaseUploadRequest || isNativeFileUpload(value);
+}
+
 export function patchRequestOptionsForFileUpload<T extends RequestOptionsLike>(options: T): T {
-    if (typeof options.body !== 'object') {
+    if (!options.body || typeof options.body !== 'object') {
         return options;
     }
 
-    const hasFileUpload = Object.values(options.body as object).some(v => v instanceof BaseUploadRequest);
+    const requestBody = options.body as Record<string, unknown>;
+    const hasFileUpload = Object.values(requestBody).some(isFileUpload);
     if (!hasFileUpload) return options;
 
     const body = new FormData();
     const jsonBody: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(options.body as object)) {
+    for (const [key, value] of Object.entries(requestBody)) {
         if (value instanceof ReactNativeFileUploadRequest) {
             body.append(key, value as unknown as Blob);
         } else if (value instanceof FileUploadRequest) {
             body.append(key, value.blob);
+        } else if (isNativeFileUpload(value)) {
+            body.append(key, value);
         } else {
             jsonBody[key] = value;
         }
