@@ -36,16 +36,16 @@ export interface OpenApiRequestOptions {
     [key: string]: unknown;
 }
 
-export type RequestResult<TData = unknown, TError = unknown, ThrowOnError extends boolean = boolean> = ThrowOnError extends true
-    ? Promise<{ data: TData; request: Request; response: Response }>
-    : Promise<
-          ({ data: TData; error: undefined } | { data: undefined; error: TError }) & {
+export type RequestResult<TData = unknown, TError = unknown, ThrowOnError extends boolean = boolean> = Promise<
+    ThrowOnError extends true
+        ? { data: TData; request: Request; response: Response }
+        : ({ data: TData; error: undefined } | { data: undefined; error: TError }) & {
               // request/response may be undefined, because the error may originate from
               // building the request object itself or from a network error
               request?: Request;
               response?: Response;
           }
-      >;
+>;
 
 export interface OpenApiClient {
     setConfig(config: Record<string, unknown>): unknown;

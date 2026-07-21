@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import path from 'node:path';
 import { describe, it, before } from 'node:test';
@@ -46,8 +46,18 @@ describe('E2E: OpenAPI Client Codegen', () => {
         const { client } = await import('./generated/client.gen.js');
         configureOpenApiClient(client, {
             headers: { 'X-Test': 'value' },
-            onError: () => null
+            onError: () => null,
+            wrapper: async (options, request) => {
+                return await request(options);
+            }
         });
+    });
+
+    it('uses JSON when an optional multipart upload is omitted', () => {
+        const sdk = readFileSync(path.join(OUT_PATH, 'sdk.gen.ts'), 'utf8');
+        const createRequestMethod = sdk.slice(sdk.indexOf('public static createRequest'));
+
+        assert.match(createRequestMethod, /'Content-Type': 'application\/json'/);
     });
 
     it('converts native Blob and File values to Deepkit multipart payloads', async () => {
