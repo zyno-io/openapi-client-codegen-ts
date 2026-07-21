@@ -130,7 +130,7 @@ configureOpenApiClient(client, {
         Authorization: `Bearer ${token}`
     },
     onError: (err, options) => {
-        if (err instanceof OpenApiError && err.response.status === 401) {
+        if (err instanceof OpenApiError && err.response?.status === 401) {
             redirectToLogin();
             return null; // the request promise will never settle
         }
@@ -168,14 +168,14 @@ Called when the server returns an error response. Receives an `OpenApiError` and
 configureOpenApiClient(client, {
     onError: (err, options) => {
         // Throw a different error
-        if (err.response.status === 403) {
+        if (err.response?.status === 403) {
             throw new ForbiddenError(err.message);
         }
 
         // Return null to silently discard the error — the request promise
         // will never resolve or reject, so the caller hangs and does nothing.
         // Useful when you're redirecting the user away from the page entirely.
-        if (err.response.status === 401) {
+        if (err.response?.status === 401) {
             redirectToLogin();
             return null;
         }

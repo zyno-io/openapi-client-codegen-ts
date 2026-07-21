@@ -57,6 +57,24 @@ paths:
                 $ref: '#/components/schemas/Pet'
         '404':
           description: Pet not found
+  /requests:
+    post:
+      operationId: createRequest
+      tags:
+        - requests
+      summary: Create a request with an optional photo
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CreateRequestRequest'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRequestRequest'
+      responses:
+        '204':
+          description: Request created
 components:
   schemas:
     Pet:
@@ -93,3 +111,21 @@ components:
           type: string
         name:
           type: string
+    CreateRequestRequest:
+      type: object
+      required:
+        - description
+        - serviceAddress
+      properties:
+        description:
+          type: string
+        serviceAddress:
+          type: object
+          required:
+            - city
+          properties:
+            city:
+              type: string
+        photo:
+          type: string
+          format: binary
