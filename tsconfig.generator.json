@@ -6,7 +6,8 @@
         "types": ["node"],
         "noImplicitAny": true,
         "outDir": "dist/esm",
-        "module": "Node16",
+        "module": "NodeNext",
+        "moduleResolution": "NodeNext",
         "target": "ES2022"
     }
 }

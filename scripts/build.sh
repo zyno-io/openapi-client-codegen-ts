@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Compile ESM and CJS for both client and generator
+# Compile ESM artifacts and the CommonJS client artifact.
 tsc -p tsconfig.client.json
 tsc -p tsconfig.generator.json
 tsc -p tsconfig.client.cjs.json
-tsc -p tsconfig.generator.cjs.json
 
 # Rename CJS .js files to .cjs
 find dist/cjs -name '*.js' -exec sh -c 'mv "$1" "${1%.js}.cjs"' _ {} \;

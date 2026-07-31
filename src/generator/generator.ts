@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 
 const DEFAULT_OUT_PATH = './src/openapi-client-generated';
+const GENERATED_SDK_HASH_FILE = '.openapi-client-codegen.hash';
 
 interface IGeneratorConfig {
     path: string;
@@ -19,7 +20,6 @@ interface IOverrideConfig {
     operations: string[];
 }
 
-let generatedHash: string | null = null;
 let generatorMap: Record<string, string | IGeneratorConfig> = {};
 let overridesMap: Record<string, string | IOverrideConfig> | null = null;
 let overridesInverseMap: Record<string, string> | null = null;
@@ -89,19 +89,20 @@ async function generateOpenapiClientInternal(openapiYamlPath: string, outConfig:
     operations = operations ?? resolveGeneratorOperations(outConfig);
 
     const yaml = readFileSync(openapiYamlPath, 'utf8');
-    const hashParts = [yaml, outPath, ...(operations ?? [])];
-    const hash = createHash('sha256').update(hashParts.join('\0')).digest('hex');
+    const generationState = createGenerationState(yaml, prefix, operations);
+    const copyDestination = overridesInverseMap?.[openapiYamlPath];
+    let inputPath: string | undefined;
 
-    if (hash === generatedHash) {
+    const getInputPath = () => {
+        inputPath ??= operations?.length ? filterSpecByOperations(openapiYamlPath, yaml, operations) : openapiYamlPath;
+        return inputPath;
+    };
+
+    if (isGeneratedSdkCurrent(outPath, generationState)) {
+        if (copyDestination) {
+            copyFileIfChanged(getInputPath(), copyDestination);
+        }
         return;
-    }
-
-    generatedHash = hash;
-
-    let inputPath = openapiYamlPath;
-
-    if (operations?.length) {
-        inputPath = filterSpecByOperations(openapiYamlPath, yaml, operations);
     }
 
     try {
@@ -112,7 +113,7 @@ async function generateOpenapiClientInternal(openapiYamlPath: string, outConfig:
         }
 
         await OpenAPI.createClient({
-            input: inputPath,
+            input: getInputPath(),
             output: outPath,
             plugins: [
                 {
@@ -134,9 +135,10 @@ async function generateOpenapiClientInternal(openapiYamlPath: string, outConfig:
             ]
         });
 
-        if (overridesInverseMap?.[openapiYamlPath]) {
-            const copySource = operations?.length ? inputPath : openapiYamlPath;
-            copyFileSync(copySource, overridesInverseMap[openapiYamlPath]);
+        writeGenerationState(outPath, generationState);
+
+        if (copyDestination) {
+            copyFileIfChanged(getInputPath(), copyDestination);
         }
 
         console.log(
@@ -145,6 +147,46 @@ async function generateOpenapiClientInternal(openapiYamlPath: string, outConfig:
     } catch (err) {
         console.error(`[${new Date().toISOString()}] Error generating client from ${openapiYamlPath}:`, err);
     }
+}
+
+interface IGenerationState {
+    version: 1;
+    yamlHash: string;
+    prefix: string;
+    operations: string[];
+}
+
+function createGenerationState(yaml: string, prefix: string, operations: string[] | undefined): IGenerationState {
+    return {
+        version: 1,
+        yamlHash: createHash('sha256').update(yaml).digest('hex'),
+        prefix,
+        operations: operations ?? []
+    };
+}
+
+function isGeneratedSdkCurrent(outPath: string, state: IGenerationState): boolean {
+    try {
+        return readFileSync(join(outPath, GENERATED_SDK_HASH_FILE), 'utf8') === JSON.stringify(state);
+    } catch {
+        return false;
+    }
+}
+
+function writeGenerationState(outPath: string, state: IGenerationState) {
+    writeFileSync(join(outPath, GENERATED_SDK_HASH_FILE), JSON.stringify(state));
+}
+
+function copyFileIfChanged(source: string, destination: string) {
+    try {
+        if (readFileSync(source).equals(readFileSync(destination))) {
+            return;
+        }
+    } catch {
+        // The destination is missing or unreadable, so it needs to be refreshed.
+    }
+
+    copyFileSync(source, destination);
 }
 
 /**

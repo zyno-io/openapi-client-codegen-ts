@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import path from 'node:path';
 import { describe, it, before } from 'node:test';
@@ -23,6 +24,22 @@ describe('E2E: OpenAPI Client Codegen', () => {
         assert.ok(existsSync(path.join(OUT_PATH, 'client.gen.ts')), 'client.gen.ts should exist');
         assert.ok(existsSync(path.join(OUT_PATH, 'sdk.gen.ts')), 'sdk.gen.ts should exist');
         assert.ok(existsSync(path.join(OUT_PATH, 'types.gen.ts')), 'types.gen.ts should exist');
+    });
+
+    it('records the YAML hash and skips unchanged SDK generation', async () => {
+        const state = JSON.parse(readFileSync(path.join(OUT_PATH, '.openapi-client-codegen.hash'), 'utf8'));
+        assert.equal(state.yamlHash, createHash('sha256').update(readFileSync(SPEC_PATH, 'utf8')).digest('hex'));
+
+        const retainedFile = path.join(OUT_PATH, 'retained-on-skip');
+        try {
+            writeFileSync(retainedFile, 'keep');
+
+            await generateOpenapiClient(SPEC_PATH, OUT_PATH);
+
+            assert.ok(existsSync(retainedFile), 'unchanged input should not replace the SDK directory');
+        } finally {
+            rmSync(retainedFile, { force: true });
+        }
     });
 
     it('produces a client assignable to OpenApiClient', async () => {

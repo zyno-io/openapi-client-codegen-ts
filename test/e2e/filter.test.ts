@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, it, before } from 'node:test';
 
-import { generateOpenapiClient } from '../../src/generator/generator.js';
+import { generateConfiguredOpenapiClients, generateOpenapiClient } from '../../src/generator/generator.js';
 
 const SPEC_PATH = path.join(import.meta.dirname, 'petstore.yaml');
 const OUT_PATH = path.join(import.meta.dirname, 'generated-filtered');
@@ -128,5 +129,38 @@ describe('Spec Filtering: preserves spec structure', () => {
         assert.ok(types.includes('Pet'), 'should include Pet');
         assert.ok(types.includes('Owner'), 'should include Owner (transitive)');
         assert.ok(!types.includes('CreatePetRequest'), 'should not include CreatePetRequest');
+    });
+});
+
+describe('Development spec syncing', () => {
+    it('does not copy an identical development spec', async () => {
+        const workDir = mkdtempSync(path.join(tmpdir(), 'openapi-dev-copy-'));
+        const originalWorkingDirectory = process.cwd();
+        const originalSpecPath = path.join(workDir, 'spec.yaml');
+        const developmentSpecPath = path.join(workDir, 'spec.dev.yaml');
+        const spec = readFileSync(SPEC_PATH, 'utf8');
+
+        try {
+            writeFileSync(originalSpecPath, spec);
+            writeFileSync(developmentSpecPath, spec);
+            writeFileSync(path.join(workDir, 'openapi-specs.json'), JSON.stringify({ './spec.yaml': './generated' }));
+            writeFileSync(path.join(workDir, 'openapi-specs.dev.json'), JSON.stringify({ './spec.yaml': './spec.dev.yaml' }));
+
+            const oldTimestamp = new Date('2000-01-01T00:00:00.000Z');
+            utimesSync(originalSpecPath, oldTimestamp, oldTimestamp);
+
+            process.chdir(workDir);
+            await generateConfiguredOpenapiClients();
+
+            assert.ok(statSync(originalSpecPath).mtimeMs < 1_000_000_000_000, 'identical spec should retain its timestamp');
+
+            writeFileSync(developmentSpecPath, `${spec}\n# changed in development\n`);
+            await generateConfiguredOpenapiClients();
+
+            assert.equal(readFileSync(originalSpecPath, 'utf8'), readFileSync(developmentSpecPath, 'utf8'));
+        } finally {
+            process.chdir(originalWorkingDirectory);
+            rmSync(workDir, { recursive: true, force: true });
+        }
     });
 });
