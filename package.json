@@ -1,6 +1,6 @@
 {
     "name": "@zyno-io/openapi-client-codegen",
-    "version": "2.9.1",
+    "version": "2.10.0",
     "description": "OpenAPI client generator for TypeScript apps",
     "license": "MIT",
     "author": {
