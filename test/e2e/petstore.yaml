@@ -129,3 +129,8 @@ components:
         photo:
           type: string
           format: binary
+        attachments:
+          type: array
+          items:
+            type: string
+            format: binary

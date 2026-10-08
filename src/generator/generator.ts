@@ -117,7 +117,8 @@ async function generateOpenapiClientInternal(openapiYamlPath: string, outConfig:
             output: outPath,
             plugins: [
                 {
-                    name: '@hey-api/typescript' // preserve default output
+                    name: '@hey-api/typescript', // preserve default output
+                    $resolvers: { string: binaryUploadType }
                 },
                 {
                     name: '@hey-api/sdk',
@@ -148,6 +149,19 @@ async function generateOpenapiClientInternal(openapiYamlPath: string, outConfig:
         console.error(`[${new Date().toISOString()}] Error generating client from ${openapiYamlPath}:`, err);
     }
 }
+
+/**
+ * Binary fields also accept this package's upload helpers, which the runtime turns
+ * into multipart file parts alongside native Blob and File values.
+ */
+const binaryUploadType: NonNullable<OpenAPI.Plugins.HeyApiTypeScript.Resolvers['string']> = ctx => {
+    if (ctx.schema.format !== 'binary') return undefined;
+    const uploadValue = ctx.plugin.symbolFactory.register('FileUploadValue', {
+        external: '@zyno-io/openapi-client-codegen',
+        kind: 'type'
+    });
+    return ctx.$.type.or(ctx.$.type('Blob'), ctx.$.type('File'), ctx.$.type(uploadValue));
+};
 
 interface IGenerationState {
     version: 1;

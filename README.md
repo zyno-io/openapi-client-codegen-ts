@@ -19,7 +19,7 @@ A TypeScript library that wraps [@hey-api/openapi-ts](https://heyapi.dev/) to pr
 - **Client configuration** — `configureOpenApiClient()` sets up error handling, dynamic headers, and request middleware in one call.
 - **Structured errors** — Responses are wrapped in `OpenApiError` with access to the request, response, and parsed body, rather than raw fetch errors.
 - **Request middleware** — A wrapper function lets you intercept every request for logging, auth token injection, retry logic, etc.
-- **File uploads** — Browser `Blob`/`File` values and React Native upload helpers automatically convert to multipart/form-data.
+- **File uploads** — Browser `Blob`/`File` values and React Native upload helpers, singly or in arrays, automatically convert to multipart/form-data.
 - **CLI and watch mode** — A CLI tool and programmatic API for generating clients, with file watching for automatic regeneration during development.
 
 ## Installation
@@ -209,10 +209,11 @@ configureOpenApiClient(client, {
 
 ## File Uploads
 
-Generated multipart upload fields are represented as `Blob | File | null`. When a Deepkit backend exposes `UploadedFile` parameters, passing a `Blob` or `File` automatically converts the request to multipart/form-data, sends file fields as file parts, and moves non-file fields into the `_payload` JSON part expected by Deepkit:
+Generated multipart upload fields are typed as `Blob | File | FileUploadValue`, where `FileUploadValue` covers this package's `FileUploadRequest` and `ReactNativeFileUploadRequest` helpers. When a Deepkit backend exposes `UploadedFile` parameters, passing any of these converts the request to multipart/form-data, sends file fields as file parts, and moves non-file fields into the `_payload` JSON part expected by Deepkit. An array of files is sent as one part per file under the same field name, in order. Requests with no file values (including empty arrays) stay JSON.
 
 ```typescript
 import { ReactNativeFileUploadRequest } from '@zyno-io/openapi-client-codegen';
+import { File } from 'expo-file-system';
 
 // Browser — pass a File or Blob directly
 const pdfFile = new File([pdfBlob], 'report.pdf', { type: 'application/pdf' });
@@ -225,17 +226,20 @@ const result = dataFrom(
     })
 );
 
-// React Native — pass a file URI helper
+// React Native — pass a file URI helper, or an array of them for a repeated field
 await ProfileApi.postProfileUploadPhoto({
     body: {
         photo: new ReactNativeFileUploadRequest({
             uri: photo.uri,
             name: 'photo.jpg',
-            type: 'image/jpeg'
-        }) as unknown as Blob
+            type: 'image/jpeg',
+            bytes: () => new File(photo.uri).bytes()
+        })
     }
 });
 ```
+
+`bytes` reads the file's contents. It is required when FormData is serialized in JavaScript, as `expo/fetch` (Expo's default global `fetch`) does; without it the upload fails with an error naming the file. React Native's own networking reads `uri` and doesn't need it. `name` and `type` are sent as given, so the part's filename and Content-Type don't depend on the file's extension.
 
 ## Response Utilities
 

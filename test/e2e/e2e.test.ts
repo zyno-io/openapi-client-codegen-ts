@@ -6,7 +6,7 @@ import path from 'node:path';
 import { describe, it, before } from 'node:test';
 
 import { configureOpenApiClient, type OpenApiClient } from '../../src/client/client.js';
-import { patchRequestOptionsForFileUpload } from '../../src/client/uploads.js';
+import { FileUploadRequest, patchRequestOptionsForFileUpload, ReactNativeFileUploadRequest } from '../../src/client/uploads.js';
 import { generateOpenapiClient } from '../../src/generator/generator.js';
 
 const SPEC_PATH = path.join(import.meta.dirname, 'petstore.yaml');
@@ -113,6 +113,121 @@ describe('E2E: OpenAPI Client Codegen', () => {
         assert.deepEqual(JSON.parse(payloadPart), {
             title: 'Q4 Report',
             missingAttachment: null
+        });
+    });
+
+    it('types binary fields to accept the upload helpers', () => {
+        const types = readFileSync(path.join(OUT_PATH, 'types.gen.ts'), 'utf8');
+
+        assert.match(types, /import type \{ FileUploadValue \} from '@zyno-io\/openapi-client-codegen';/);
+        assert.match(types, /photo\?: Blob \| File \| FileUploadValue;/);
+        assert.match(types, /attachments\?: Array<Blob \| File \| FileUploadValue>;/);
+    });
+
+    it('sends an array of files as repeated parts, in order', async () => {
+        const result = patchRequestOptionsForFileUpload({
+            body: {
+                textContent: 'hi',
+                tags: ['a'],
+                none: [],
+                attachments: [new File(['one'], '1.txt', { type: 'text/plain' }), new FileUploadRequest(new Blob(['two'], { type: 'text/plain' }))]
+            },
+            headers: { 'content-type': 'application/json' }
+        });
+
+        assert.ok(result.body instanceof FormData);
+        const formData = result.body as unknown as FormData;
+        const parts = formData.getAll('attachments');
+        assert.equal(parts.length, 2);
+        if (!(parts[0] instanceof File) || !(parts[1] instanceof Blob)) assert.fail('Expected file parts');
+        assert.equal(parts[0].name, '1.txt');
+        assert.equal(await parts[0].text(), 'one');
+        assert.equal(await parts[1].text(), 'two');
+
+        const payloadPart = formData.get('_payload');
+        if (typeof payloadPart !== 'string') assert.fail('Expected _payload part to be a string');
+        assert.deepEqual(JSON.parse(payloadPart), { textContent: 'hi', tags: ['a'], none: [] });
+    });
+
+    it('keeps JSON when the only arrays hold no files', () => {
+        const options = { body: { textContent: 'hi', attachments: [] }, headers: { 'content-type': 'application/json' } };
+        assert.equal(patchRequestOptionsForFileUpload(options), options);
+    });
+
+    it('rejects arrays that mix files with other values', () => {
+        assert.throws(
+            () => patchRequestOptionsForFileUpload({ body: { attachments: [new Blob(['x']), 'not a file'] } }),
+            /Field "attachments" mixes file uploads with other values/
+        );
+    });
+
+    describe('ReactNativeFileUploadRequest', () => {
+        // React Native's FormData keeps `{ uri, ... }` parts as given; Node's would stringify them.
+        class ReactNativeLikeFormData {
+            parts: [string, unknown][] = [];
+            append(name: string, value: unknown) {
+                this.parts.push([name, value]);
+            }
+        }
+
+        // Mirrors expo/fetch, which serializes FormData in JS and needs `bytes()` for file parts.
+        async function serializeLikeExpoFetch(form: ReactNativeLikeFormData) {
+            const out: string[] = [];
+            for (const [name, part] of form.parts) {
+                if (typeof part === 'string') out.push(`${name}=${part}`);
+                else if (typeof part === 'object' && part && 'bytes' in part) {
+                    const file = part as unknown as { name: string; type: string; bytes(): Promise<Uint8Array> };
+                    const { name: fileName, type } = file;
+                    const bytes = await file.bytes();
+                    out.push(`${name}[${fileName};${type}]=${Buffer.from(bytes).toString()}`);
+                } else throw new Error('Unsupported FormDataPart implementation');
+            }
+            return out;
+        }
+
+        const originalFormData = globalThis.FormData;
+
+        it('sends name, type, and bytes through a JavaScript FormData serializer', async () => {
+            globalThis.FormData = ReactNativeLikeFormData as never;
+            try {
+                const photo = (contents: string, name: string) =>
+                    new ReactNativeFileUploadRequest({
+                        uri: `file:///${name}`,
+                        name,
+                        type: 'image/jpeg',
+                        bytes: async () => new TextEncoder().encode(contents)
+                    });
+                const result = patchRequestOptionsForFileUpload({
+                    body: { textContent: '', attachments: [photo('one', 'a.jpg'), photo('two', 'b.jpg')] }
+                });
+
+                assert.deepEqual(await serializeLikeExpoFetch(result.body as never), [
+                    'attachments[a.jpg;image/jpeg]=one',
+                    'attachments[b.jpg;image/jpeg]=two',
+                    '_payload={"textContent":""}'
+                ]);
+            } finally {
+                globalThis.FormData = originalFormData;
+            }
+        });
+
+        it('keeps functions out of the properties React Native copies to native', () => {
+            const upload = new ReactNativeFileUploadRequest({
+                uri: 'file:///a.jpg',
+                name: 'a.jpg',
+                type: 'image/jpeg',
+                bytes: async () => new Uint8Array()
+            });
+            assert.deepEqual(
+                Object.values({ ...upload }).filter(v => typeof v === 'function'),
+                []
+            );
+            assert.equal({ ...upload }.uri, 'file:///a.jpg');
+        });
+
+        it('explains a missing bytes option instead of failing generically', async () => {
+            const upload = new ReactNativeFileUploadRequest({ uri: 'file:///a.jpg' });
+            await assert.rejects(upload.bytes(), /has no `bytes` option/);
         });
     });
 
