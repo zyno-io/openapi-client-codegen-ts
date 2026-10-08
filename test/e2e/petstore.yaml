@@ -75,6 +75,27 @@ paths:
       responses:
         '204':
           description: Request created
+  /messages:
+    post:
+      operationId: sendMessage
+      tags:
+        - requests
+      summary: Send a message whose JSON variant omits the file fields
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SendMessageRequest'
+          application/json:
+            schema:
+              type: object
+              properties:
+                textContent:
+                  type: string
+      responses:
+        '204':
+          description: Message sent
 components:
   schemas:
     Pet:
@@ -111,6 +132,16 @@ components:
           type: string
         name:
           type: string
+    SendMessageRequest:
+      type: object
+      properties:
+        textContent:
+          type: string
+        attachments:
+          type: array
+          items:
+            type: string
+            format: binary
     CreateRequestRequest:
       type: object
       required:

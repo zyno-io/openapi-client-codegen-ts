@@ -124,6 +124,16 @@ describe('E2E: OpenAPI Client Codegen', () => {
         assert.match(types, /attachments\?: Array<Blob \| File \| FileUploadValue>;/);
     });
 
+    it('types a body from its multipart schema when the JSON variant omits file fields', () => {
+        const types = readFileSync(path.join(OUT_PATH, 'types.gen.ts'), 'utf8');
+        const sdk = readFileSync(path.join(OUT_PATH, 'sdk.gen.ts'), 'utf8');
+        const sendMessageData = types.slice(types.indexOf('export type SendMessageData'));
+
+        assert.match(sendMessageData, /^export type SendMessageData = \{\n {4}body: SendMessageRequest;/);
+        // Still JSON by default; the runtime switches to multipart when files are present.
+        assert.match(sdk.slice(sdk.indexOf('public static sendMessage')), /'Content-Type': 'application\/json'/);
+    });
+
     it('sends an array of files as repeated parts, in order', async () => {
         const result = patchRequestOptionsForFileUpload({
             body: {

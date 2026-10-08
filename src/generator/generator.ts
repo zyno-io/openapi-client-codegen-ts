@@ -4,6 +4,7 @@ import { copyFileSync, existsSync, mkdtempSync, readFileSync, watch, writeFileSy
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 
 const DEFAULT_OUT_PATH = './src/openapi-client-generated';
@@ -97,6 +98,7 @@ async function generateOpenapiClientInternal(openapiYamlPath: string, outConfig:
         inputPath ??= operations?.length ? filterSpecByOperations(openapiYamlPath, yaml, operations) : openapiYamlPath;
         return inputPath;
     };
+    const getGenerationInputPath = () => alignJsonBodiesWithMultipart(getInputPath()) ?? getInputPath();
 
     if (isGeneratedSdkCurrent(outPath, generationState)) {
         if (copyDestination) {
@@ -113,7 +115,7 @@ async function generateOpenapiClientInternal(openapiYamlPath: string, outConfig:
         }
 
         await OpenAPI.createClient({
-            input: getInputPath(),
+            input: getGenerationInputPath(),
             output: outPath,
             plugins: [
                 {
@@ -164,15 +166,18 @@ const binaryUploadType: NonNullable<OpenAPI.Plugins.HeyApiTypeScript.Resolvers['
 };
 
 interface IGenerationState {
-    version: 1;
+    version: typeof GENERATION_STATE_VERSION;
     yamlHash: string;
     prefix: string;
     operations: string[];
 }
 
+// Bump when generator output changes for the same input, so existing SDKs regenerate.
+const GENERATION_STATE_VERSION = 2;
+
 function createGenerationState(yaml: string, prefix: string, operations: string[] | undefined): IGenerationState {
     return {
-        version: 1,
+        version: GENERATION_STATE_VERSION,
         yamlHash: createHash('sha256').update(yaml).digest('hex'),
         prefix,
         operations: operations ?? []
@@ -341,14 +346,50 @@ function filterSpecByOperations(originalPath: string, content: string, operation
         components: Object.keys(filteredComponents).length > 0 ? filteredComponents : undefined
     };
 
-    // Write to temp file
-    const tmpDir = mkdtempSync(join(tmpdir(), 'openapi-filtered-'));
-    const ext = isJson ? '.json' : '.yaml';
-    const tmpPath = join(tmpDir, `filtered${ext}`);
-    const output = isJson ? JSON.stringify(filteredSpec, null, 2) : stringifyYaml(filteredSpec);
-    writeFileSync(tmpPath, output, 'utf8');
+    return writeTempSpec('filtered', isJson, filteredSpec);
+}
 
+function writeTempSpec(name: string, isJson: boolean, spec: unknown): string {
+    const tmpDir = mkdtempSync(join(tmpdir(), `openapi-${name}-`));
+    const tmpPath = join(tmpDir, `${name}${isJson ? '.json' : '.yaml'}`);
+    writeFileSync(tmpPath, isJson ? JSON.stringify(spec, null, 2) : stringifyYaml(spec), 'utf8');
     return tmpPath;
+}
+
+/**
+ * hey-api types a request body from its JSON variant whenever one exists. A Deepkit
+ * upload endpoint's JSON variant omits the binary fields, so those would be untyped.
+ * Point the JSON variant at the multipart schema instead: the SDK still sends JSON, and
+ * the runtime switches to multipart once a file value is present.
+ *
+ * Returns the path of an adjusted copy of the spec, or undefined if nothing changed.
+ */
+function alignJsonBodiesWithMultipart(specPath: string): string | undefined {
+    const isJson = specPath.endsWith('.json');
+    const content = readFileSync(specPath, 'utf8');
+    const spec = isJson ? JSON.parse(content) : parseYaml(content);
+
+    const requestBodies: unknown[] = Object.values(spec.components?.requestBodies ?? {});
+    for (const methods of Object.values(spec.paths ?? {})) {
+        for (const operation of Object.values((methods ?? {}) as Record<string, unknown>)) {
+            if (typeof operation === 'object' && operation !== null) {
+                requestBodies.push((operation as { requestBody?: unknown }).requestBody);
+            }
+        }
+    }
+
+    let changed = false;
+    for (const requestBody of requestBodies) {
+        const bodyContent = (requestBody as { content?: Record<string, { schema?: unknown }> } | undefined)?.content;
+        const multipartSchema = bodyContent?.['multipart/form-data']?.schema;
+        const json = bodyContent?.['application/json'];
+        if (multipartSchema && json && !isDeepStrictEqual(json.schema, multipartSchema)) {
+            json.schema = multipartSchema;
+            changed = true;
+        }
+    }
+
+    return changed ? writeTempSpec('aligned', isJson, spec) : undefined;
 }
 
 function collectRefs(obj: unknown, refs: Set<string>): void {

@@ -209,7 +209,7 @@ configureOpenApiClient(client, {
 
 ## File Uploads
 
-Generated multipart upload fields are typed as `Blob | File | FileUploadValue`, where `FileUploadValue` covers this package's `FileUploadRequest` and `ReactNativeFileUploadRequest` helpers. When a Deepkit backend exposes `UploadedFile` parameters, passing any of these converts the request to multipart/form-data, sends file fields as file parts, and moves non-file fields into the `_payload` JSON part expected by Deepkit. An array of files is sent as one part per file under the same field name, in order. Requests with no file values (including empty arrays) stay JSON.
+Generated multipart upload fields are typed as `Blob | File | FileUploadValue`, where `FileUploadValue` covers this package's `FileUploadRequest` and `ReactNativeFileUploadRequest` helpers. When a Deepkit backend exposes `UploadedFile` parameters, passing any of these converts the request to multipart/form-data, sends file fields as file parts, and moves non-file fields into the `_payload` JSON part expected by Deepkit. An array of files is sent as one part per file under the same field name, in order. Requests with no file values (including empty arrays) stay JSON. When an operation offers both a multipart and a JSON body, the generated body type comes from the multipart schema, so file fields stay typed even if the JSON variant omits them.
 
 ```typescript
 import { ReactNativeFileUploadRequest } from '@zyno-io/openapi-client-codegen';
