@@ -109,13 +109,15 @@ async function generateOpenapiClientInternal(openapiYamlPath: string, outConfig:
 
     let preparedPath: string | undefined;
     try {
+        // Before removing the existing SDK, so a spec that fails to prepare leaves it in place.
+        preparedPath = prepareSpecForGeneration(getInputPath(), dirname(openapiYamlPath));
+
         try {
             await rm(outPath, { recursive: true });
         } catch {
             // ignore
         }
 
-        preparedPath = prepareSpecForGeneration(getInputPath(), dirname(openapiYamlPath));
         await OpenAPI.createClient({
             input: preparedPath ?? getInputPath(),
             output: outPath,
@@ -373,7 +375,8 @@ function prepareSpecForGeneration(specPath: string, refBase: string): string | u
     const isJson = specPath.endsWith('.json');
     // Round-trip through JSON so YAML aliases become separate objects: marking a request
     // schema must not also mark a response that aliased it.
-    const parsed = isJson ? JSON.parse(readFileSync(specPath, 'utf8')) : parseYaml(readFileSync(specPath, 'utf8'));
+    // No alias limit: hey-api's own YAML parser has none, so specs it accepts must parse here too.
+    const parsed = isJson ? JSON.parse(readFileSync(specPath, 'utf8')) : parseYaml(readFileSync(specPath, 'utf8'), { maxAliasCount: -1 });
     const spec = JSON.parse(JSON.stringify(parsed));
 
     // Mark first, so a JSON variant aligned to an inline multipart schema copies the markers.
@@ -435,8 +438,17 @@ function alignJsonBodiesWithMultipart(spec: SpecObject): boolean {
     return changed;
 }
 
+const SCHEMA_REF_PREFIX = '#/components/schemas/';
+
+/** The component schema a `$ref` points at exactly, if any. */
 const schemaRefName = (ref: unknown) =>
-    typeof ref === 'string' && ref.startsWith('#/components/schemas/') ? ref.slice('#/components/schemas/'.length) : undefined;
+    typeof ref === 'string' && ref.startsWith(SCHEMA_REF_PREFIX) && !ref.includes('/', SCHEMA_REF_PREFIX.length)
+        ? ref.slice(SCHEMA_REF_PREFIX.length)
+        : undefined;
+
+/** The component schema a `$ref` points at or into (e.g. `.../Upload/properties/file` is `Upload`). */
+const schemaRefComponent = (ref: unknown) =>
+    typeof ref === 'string' && ref.startsWith(SCHEMA_REF_PREFIX) ? ref.slice(SCHEMA_REF_PREFIX.length).split('/')[0] : undefined;
 
 /**
  * Marks the file fields of multipart request bodies so binaryUploadType widens them:
@@ -474,11 +486,11 @@ function markUploadFields(spec: SpecObject): boolean {
     return changed;
 }
 
-/** Counts `$ref`s to each component schema, anywhere in the spec. */
+/** Counts `$ref`s to or into each component schema, anywhere in the spec. */
 function countSchemaRefs(node: unknown, counts = new Map<string, number>()): Map<string, number> {
     if (typeof node !== 'object' || node === null) return counts;
     for (const [key, value] of Object.entries(node as SpecObject)) {
-        const name = key === '$ref' ? schemaRefName(value) : undefined;
+        const name = key === '$ref' ? schemaRefComponent(value) : undefined;
         if (name) counts.set(name, (counts.get(name) ?? 0) + 1);
         else countSchemaRefs(value, counts);
     }

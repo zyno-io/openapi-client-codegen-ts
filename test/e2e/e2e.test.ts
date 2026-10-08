@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { chmodSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, it, before } from 'node:test';
 
@@ -142,6 +143,8 @@ describe('E2E: OpenAPI Client Codegen', () => {
         const types = readFileSync(path.join(OUT_PATH, 'types.gen.ts'), 'utf8');
 
         assert.match(types.slice(types.indexOf('export type UploadRawData')), /^export type UploadRawData = \{\n {4}body: Blob \| File;/);
+        // A response references one of its properties directly.
+        assert.match(types.slice(types.indexOf('export type Thumbnail = ')), /^export type Thumbnail = \{\n {4}image\?: Blob \| File;/);
         // Also nested inside another request body, where the runtime can't upload it.
         assert.match(types.slice(types.indexOf('export type BatchItem = ')), /^export type BatchItem = \{\n {4}file\?: Blob \| File;/);
         // Referenced from a response property that happens to be named requestBody.
@@ -152,6 +155,35 @@ describe('E2E: OpenAPI Client Codegen', () => {
             /^export type DownloadFileResponses = \{[^}]*200: Blob \| File;/
         );
         assert.match(types.slice(types.indexOf('export type Document = ')), /^export type Document = \{\n {4}contents\?: Blob \| File;/);
+    });
+
+    it('accepts YAML that reuses an anchor more than 100 times', async () => {
+        const dir = mkdtempSync(path.join(tmpdir(), 'codegen-aliases-'));
+        const outPath = path.join(dir, 'generated');
+        const properties = Array.from({ length: 101 }, (_, i) => `        field${i}: *text`).join('\n');
+        writeFileSync(
+            path.join(dir, 'spec.yaml'),
+            `openapi: 3.0.3
+info:
+  title: Aliases
+  version: '1'
+paths: {}
+components:
+  schemas:
+    Text: &text
+      type: string
+    Wide:
+      type: object
+      properties:
+${properties}
+`
+        );
+        try {
+            await generateOpenapiClient(path.join(dir, 'spec.yaml'), outPath);
+            assert.match(readFileSync(path.join(outPath, 'types.gen.ts'), 'utf8'), /field100\?: string;/);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
     });
 
     it('resolves relative $refs and leaves no adjusted spec behind', async () => {

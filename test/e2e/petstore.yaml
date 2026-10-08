@@ -224,8 +224,32 @@ paths:
       responses:
         '204':
           description: Described
+  /thumbnails:
+    post:
+      operationId: uploadThumbnail
+      tags:
+        - requests
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Thumbnail'
+      responses:
+        '200':
+          description: The stored image
+          content:
+            application/octet-stream:
+              schema:
+                $ref: '#/components/schemas/Thumbnail/properties/image'
 components:
   schemas:
+    Thumbnail:
+      type: object
+      properties:
+        image:
+          type: string
+          format: binary
     BatchItem:
       type: object
       properties:

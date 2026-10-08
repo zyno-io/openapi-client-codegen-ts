@@ -213,7 +213,7 @@ Generated multipart upload fields are typed as `Blob | File | FileUploadValue`, 
 
 ```typescript
 import { ReactNativeFileUploadRequest } from '@zyno-io/openapi-client-codegen';
-import { File } from 'expo-file-system';
+import { File as ExpoFile } from 'expo-file-system';
 
 // Browser — pass a File or Blob directly
 const pdfFile = new File([pdfBlob], 'report.pdf', { type: 'application/pdf' });
@@ -233,7 +233,7 @@ await ProfileApi.postProfileUploadPhoto({
             uri: photo.uri,
             name: 'photo.jpg',
             type: 'image/jpeg',
-            bytes: () => new File(photo.uri).bytes()
+            bytes: () => new ExpoFile(photo.uri).bytes()
         })
     }
 });
