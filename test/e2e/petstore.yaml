@@ -256,6 +256,33 @@ paths:
             application/octet-stream:
               schema:
                 $ref: '#/components/requestBodies/StampUpload/content/multipart~1form-data/schema/properties/stamp'
+  /notes:
+    post:
+      operationId: createNote
+      tags:
+        - requests
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                title:
+                  $ref: '#/paths/~1notes/post/requestBody/content/application~1json/schema/properties/title'
+                scan:
+                  type: string
+                  format: binary
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  maxLength: 80
+      responses:
+        '204':
+          description: Created
 components:
   requestBodies:
     StampUpload:

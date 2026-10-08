@@ -143,6 +143,11 @@ describe('E2E: OpenAPI Client Codegen', () => {
         const types = readFileSync(path.join(OUT_PATH, 'types.gen.ts'), 'utf8');
 
         assert.match(types.slice(types.indexOf('export type UploadRawData')), /^export type UploadRawData = \{\n {4}body: Blob \| File;/);
+        // The multipart schema references into the JSON variant, so the JSON body is kept.
+        assert.match(
+            types.slice(types.indexOf('export type CreateNoteData')),
+            /^export type CreateNoteData = \{\n {4}body: \{\n {8}title\?: string;\n {4}\};/
+        );
         // A response references a field of an inline multipart schema by JSON pointer.
         assert.match(types.slice(types.indexOf('export type StampUpload = ')), /^export type StampUpload = \{\n {4}stamp\?: Blob \| File;/);
         // A response references one of its properties directly.
@@ -239,6 +244,17 @@ ${properties}
         assert.match(
             types.slice(types.indexOf('export type SetAvatarResponses')),
             /^export type SetAvatarResponses = \{[^}]*200: Blob \| File \| null;/
+        );
+
+        // Shared with a response declared in components.pathItems.
+        assert.match(types.slice(types.indexOf('export type ExportFile = ')), /^export type ExportFile = \{\n {4}contents\?: Blob \| File;/);
+
+        // Operations in components.pathItems, including 3.1 nullable arrays of files. A field
+        // that already has anyOf alternatives is left as it is.
+        const createGalleryData = types.slice(types.indexOf('export type CreateGalleryData'));
+        assert.match(
+            createGalleryData,
+            /^export type CreateGalleryData = \{\n {4}body: \{\n {8}photos\?: Array<Blob \| File \| FileUploadValue> \| null;\n {8}cover\?: unknown \| null;/
         );
     });
 

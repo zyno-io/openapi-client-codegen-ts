@@ -40,8 +40,42 @@ paths:
           description: Created
   /exports/latest:
     $ref: '#/components/pathItems/LatestExport'
+  /galleries:
+    $ref: '#/components/pathItems/Galleries'
 components:
   pathItems:
+    Galleries:
+      post:
+        operationId: createGallery
+        tags:
+          - avatars
+        requestBody:
+          required: true
+          content:
+            multipart/form-data:
+              schema:
+                type: object
+                properties:
+                  photos:
+                    type:
+                      - array
+                      - 'null'
+                    items:
+                      type: string
+                      format: binary
+                  cover:
+                    type:
+                      - string
+                      - 'null'
+                    format: binary
+                    anyOf:
+                      - maxLength: 1000000
+            application/json:
+              schema:
+                type: object
+        responses:
+          '204':
+            description: Created
     LatestExport:
       get:
         operationId: getLatestExport

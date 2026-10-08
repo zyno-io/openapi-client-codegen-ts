@@ -412,10 +412,18 @@ interface IRequestBodyContent {
 /** Request body content maps from operations and from `components.requestBodies`. */
 function requestBodyContents(spec: SpecObject): IRequestBodyContent[] {
     const bodies: { body: unknown; pointer: string }[] = [];
-    for (const [path, pathItem] of Object.entries(asObject(spec.paths) ?? {})) {
+    const pathItems = [
+        ...Object.entries(asObject(spec.paths) ?? {}).map(([path, item]) => ({ item, pointer: `#/paths/${escapePointer(path)}` })),
+        // OpenAPI 3.1 paths can $ref these.
+        ...Object.entries(asObject(asObject(spec.components)?.pathItems) ?? {}).map(([name, item]) => ({
+            item,
+            pointer: `#/components/pathItems/${escapePointer(name)}`
+        }))
+    ];
+    for (const { item, pointer } of pathItems) {
         for (const method of HTTP_METHODS) {
-            const operation = asObject(asObject(pathItem)?.[method]);
-            if (operation) bodies.push({ body: operation.requestBody, pointer: `#/paths/${escapePointer(path)}/${method}/requestBody` });
+            const operation = asObject(asObject(item)?.[method]);
+            if (operation) bodies.push({ body: operation.requestBody, pointer: `${pointer}/${method}/requestBody` });
         }
     }
     for (const [name, body] of Object.entries(asObject(asObject(spec.components)?.requestBodies) ?? {})) {
@@ -434,10 +442,14 @@ function requestBodyContents(spec: SpecObject): IRequestBodyContent[] {
  * the runtime switches to multipart once a file value is present.
  */
 function alignJsonBodiesWithMultipart(spec: SpecObject): boolean {
+    const refs = collectRefStrings(spec);
     let changed = false;
-    for (const { content } of requestBodyContents(spec)) {
+    for (const { content, pointer } of requestBodyContents(spec)) {
         const multipartSchema = content['multipart/form-data']?.schema;
         const json = content['application/json'];
+        // Something references into the JSON schema, so replacing it would change that target.
+        const jsonPointer = `${pointer}/${escapePointer('application/json')}/schema`;
+        if (refs.some(ref => ref === jsonPointer || ref.startsWith(`${jsonPointer}/`))) continue;
         if (multipartSchema && json && !isDeepStrictEqual(json.schema, multipartSchema)) {
             json.schema = structuredClone(multipartSchema);
             changed = true;
@@ -491,7 +503,9 @@ function markUploadFields(spec: SpecObject): boolean {
         const properties = asObject(asObject(refName ? schemas[refName] : root)?.properties);
         for (const property of Object.values(properties ?? {})) {
             const field = asObject(property);
-            const fileSchema = field?.type === 'array' ? asObject(field.items) : field;
+            // OpenAPI 3.1 nullable arrays are `type: [array, 'null']`.
+            const isArray = field?.type === 'array' || (Array.isArray(field?.type) && field.type.includes('array'));
+            const fileSchema = isArray ? asObject(field!.items) : field;
             if (fileSchema && markBinarySchema(fileSchema)) changed = true;
         }
     }
@@ -526,6 +540,8 @@ function countSchemaRefs(node: unknown, counts = new Map<string, number>()): Map
  */
 function markBinarySchema(schema: SpecObject): boolean {
     if (schema.format !== 'binary') return false;
+    // Rewriting would have to merge existing alternatives; leave such fields as they are.
+    if (schema.anyOf || schema.oneOf || schema.allOf) return false;
     const types = Array.isArray(schema.type) ? (schema.type as string[]) : [schema.type];
     if (!types.includes('string')) return false;
 
