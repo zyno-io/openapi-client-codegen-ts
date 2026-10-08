@@ -152,6 +152,8 @@ describe('E2E: OpenAPI Client Codegen', () => {
         assert.match(types.slice(types.indexOf('export type StampUpload = ')), /^export type StampUpload = \{\n {4}stamp\?: Blob \| File;/);
         // A response references one of its properties directly.
         assert.match(types.slice(types.indexOf('export type Thumbnail = ')), /^export type Thumbnail = \{\n {4}image\?: Blob \| File;/);
+        // The same, through a percent-encoded reference.
+        assert.match(types.slice(types.indexOf('export type Poster = ')), /^export type Poster = \{\n {4}image\?: Blob \| File;/);
         // Also nested inside another request body, where the runtime can't upload it.
         assert.match(types.slice(types.indexOf('export type BatchItem = ')), /^export type BatchItem = \{\n {4}file\?: Blob \| File;/);
         // Referenced from a response property that happens to be named requestBody.

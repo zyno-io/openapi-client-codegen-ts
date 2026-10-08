@@ -460,15 +460,26 @@ function alignJsonBodiesWithMultipart(spec: SpecObject): boolean {
 
 const SCHEMA_REF_PREFIX = '#/components/schemas/';
 
+/** Decodes percent-encoding, which a URI fragment may use for any character. */
+const decodeRef = (ref: string) => {
+    try {
+        return decodeURIComponent(ref);
+    } catch {
+        return ref;
+    }
+};
+
 /** The component schema a `$ref` points at exactly, if any. */
-const schemaRefName = (ref: unknown) =>
-    typeof ref === 'string' && ref.startsWith(SCHEMA_REF_PREFIX) && !ref.includes('/', SCHEMA_REF_PREFIX.length)
-        ? ref.slice(SCHEMA_REF_PREFIX.length)
-        : undefined;
+const schemaRefName = (rawRef: unknown) => {
+    const ref = typeof rawRef === 'string' ? decodeRef(rawRef) : undefined;
+    return ref?.startsWith(SCHEMA_REF_PREFIX) && !ref.includes('/', SCHEMA_REF_PREFIX.length) ? ref.slice(SCHEMA_REF_PREFIX.length) : undefined;
+};
 
 /** The component schema a `$ref` points at or into (e.g. `.../Upload/properties/file` is `Upload`). */
-const schemaRefComponent = (ref: unknown) =>
-    typeof ref === 'string' && ref.startsWith(SCHEMA_REF_PREFIX) ? ref.slice(SCHEMA_REF_PREFIX.length).split('/')[0] : undefined;
+const schemaRefComponent = (rawRef: unknown) => {
+    const ref = typeof rawRef === 'string' ? decodeRef(rawRef) : undefined;
+    return ref?.startsWith(SCHEMA_REF_PREFIX) ? ref.slice(SCHEMA_REF_PREFIX.length).split('/')[0] : undefined;
+};
 
 /**
  * Marks the file fields of multipart request bodies so binaryUploadType widens them:
@@ -512,11 +523,11 @@ function markUploadFields(spec: SpecObject): boolean {
     return changed;
 }
 
-/** Every `$ref` string in the spec. */
+/** Every `$ref` string in the spec, percent-decoded. */
 function collectRefStrings(node: unknown, refs: string[] = []): string[] {
     if (typeof node !== 'object' || node === null) return refs;
     for (const [key, value] of Object.entries(node as SpecObject)) {
-        if (key === '$ref' && typeof value === 'string') refs.push(value);
+        if (key === '$ref' && typeof value === 'string') refs.push(decodeRef(value));
         else collectRefStrings(value, refs);
     }
     return refs;

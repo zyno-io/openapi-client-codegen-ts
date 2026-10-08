@@ -242,6 +242,32 @@ paths:
             application/octet-stream:
               schema:
                 $ref: '#/components/schemas/Thumbnail/properties/image'
+  /thumbnails/latest:
+    get:
+      operationId: getLatestThumbnail
+      tags:
+        - requests
+      responses:
+        '200':
+          description: The latest image, referenced with percent-encoding
+          content:
+            application/octet-stream:
+              schema:
+                $ref: '#/components/schemas/%50oster/properties/image'
+  /posters:
+    post:
+      operationId: uploadPoster
+      tags:
+        - requests
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Poster'
+      responses:
+        '204':
+          description: Stored
   /stamps:
     post:
       operationId: uploadStamp
@@ -296,6 +322,12 @@ components:
                 type: string
                 format: binary
   schemas:
+    Poster:
+      type: object
+      properties:
+        image:
+          type: string
+          format: binary
     Thumbnail:
       type: object
       properties:
