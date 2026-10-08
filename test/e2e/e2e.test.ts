@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import path from 'node:path';
 import { describe, it, before } from 'node:test';
@@ -124,8 +124,17 @@ describe('E2E: OpenAPI Client Codegen', () => {
         assert.match(types, /attachments\?: Array<Blob \| File \| FileUploadValue>;/);
     });
 
-    it('keeps Blob | File for downloads and for schemas shared with responses', () => {
+    it('marks OpenAPI 3.0 nullable upload fields', () => {
         const types = readFileSync(path.join(OUT_PATH, 'types.gen.ts'), 'utf8');
+        assert.match(types, /receipt\?: Blob \| File \| FileUploadValue \| null;/);
+    });
+
+    it('keeps Blob | File for downloads, raw binary bodies, and schemas shared with responses', () => {
+        const types = readFileSync(path.join(OUT_PATH, 'types.gen.ts'), 'utf8');
+
+        assert.match(types.slice(types.indexOf('export type UploadRawData')), /^export type UploadRawData = \{\n {4}body: Blob \| File;/);
+        // Referenced from a response property that happens to be named requestBody.
+        assert.match(types.slice(types.indexOf('export type AuditedUpload = ')), /^export type AuditedUpload = \{\n {4}file\?: Blob \| File;/);
 
         assert.match(
             types.slice(types.indexOf('export type DownloadFileResponses')),
@@ -139,7 +148,13 @@ describe('E2E: OpenAPI Client Codegen', () => {
         const outPath = path.join(import.meta.dirname, 'generated-relative-refs');
         rmSync(outPath, { recursive: true, force: true });
 
-        await generateOpenapiClient(path.join(specDir, 'spec.yaml'), outPath);
+        // Generation only needs to read the spec's directory.
+        chmodSync(specDir, 0o555);
+        try {
+            await generateOpenapiClient(path.join(specDir, 'spec.yaml'), outPath);
+        } finally {
+            chmodSync(specDir, 0o755);
+        }
 
         // The body is typed from the multipart schema; fields defined in other files aren't
         // marked as uploads, so they keep hey-api's Blob | File.

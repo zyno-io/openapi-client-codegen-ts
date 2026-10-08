@@ -133,8 +133,50 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Document'
+  /raw:
+    post:
+      operationId: uploadRaw
+      tags:
+        - requests
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '204':
+          description: Stored
+  /audits:
+    post:
+      operationId: auditUpload
+      tags:
+        - requests
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AuditedUpload'
+      responses:
+        '200':
+          description: What was received
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requestBody:
+                    $ref: '#/components/schemas/AuditedUpload'
 components:
   schemas:
+    AuditedUpload:
+      type: object
+      properties:
+        file:
+          type: string
+          format: binary
     Document:
       type: object
       properties:
@@ -203,6 +245,10 @@ components:
         photo:
           type: string
           format: binary
+        receipt:
+          type: string
+          format: binary
+          nullable: true
         attachments:
           type: array
           items:

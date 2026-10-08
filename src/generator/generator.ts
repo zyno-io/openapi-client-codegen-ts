@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, watch, writeFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { basename, dirname, extname, join } from 'node:path';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 
@@ -114,7 +114,7 @@ async function generateOpenapiClientInternal(openapiYamlPath: string, outConfig:
             // ignore
         }
 
-        preparedPath = prepareSpecForGeneration(getInputPath());
+        preparedPath = prepareSpecForGeneration(getInputPath(), dirname(openapiYamlPath));
         await OpenAPI.createClient({
             input: preparedPath ?? getInputPath(),
             output: outPath,
@@ -151,7 +151,7 @@ async function generateOpenapiClientInternal(openapiYamlPath: string, outConfig:
     } catch (err) {
         console.error(`[${new Date().toISOString()}] Error generating client from ${openapiYamlPath}:`, err);
     } finally {
-        if (preparedPath) rmSync(preparedPath, { force: true });
+        if (preparedPath) rmSync(dirname(preparedPath), { recursive: true, force: true });
     }
 }
 
@@ -364,41 +364,52 @@ function filterSpecByOperations(originalPath: string, content: string, operation
 }
 
 /**
- * Adjusts a spec before hey-api reads it. Returns the path of an adjusted copy, written
- * beside the input so relative `$ref`s resolve the same way, or undefined if nothing changed.
- * The caller deletes the copy after generation.
+ * Adjusts a spec before hey-api reads it. Returns the path of an adjusted copy in a temp
+ * directory, or undefined if nothing changed. Relative external `$ref`s are rewritten
+ * against `refBase` (the original spec's directory) so they resolve as they would have.
  */
-function prepareSpecForGeneration(specPath: string): string | undefined {
+function prepareSpecForGeneration(specPath: string, refBase: string): string | undefined {
     const isJson = specPath.endsWith('.json');
     const spec = isJson ? JSON.parse(readFileSync(specPath, 'utf8')) : parseYaml(readFileSync(specPath, 'utf8'));
 
-    const requestBodies = collectRequestBodies(spec);
-    const aligned = alignJsonBodiesWithMultipart(requestBodies);
-    const marked = markUploadFields(spec, requestBodies);
+    // Mark first, so a JSON variant aligned to an inline multipart schema copies the markers.
+    const marked = markUploadFields(spec);
+    const aligned = alignJsonBodiesWithMultipart(spec);
     if (!aligned && !marked) return undefined;
 
-    const preparedPath = join(
-        dirname(specPath),
-        `.${basename(specPath, extname(specPath))}.codegen-${process.pid}-${Date.now()}${extname(specPath)}`
-    );
+    rebaseExternalRefs(spec, refBase);
+    const tmpDir = mkdtempSync(join(tmpdir(), 'openapi-prepared-'));
+    const preparedPath = join(tmpDir, `prepared${isJson ? '.json' : '.yaml'}`);
     writeFileSync(preparedPath, isJson ? JSON.stringify(spec, null, 2) : stringifyYaml(spec), 'utf8');
     return preparedPath;
 }
 
-type MediaContent = Record<string, { schema?: unknown }>;
 type SpecObject = Record<string, unknown>;
+type MediaContent = Record<string, { schema?: unknown }>;
 
 const HTTP_METHODS = ['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'];
 
-/** Request body content maps from operations and from `components.requestBodies`. */
-function collectRequestBodies(spec: SpecObject): MediaContent[] {
-    const bodies: unknown[] = Object.values((spec.components as SpecObject | undefined)?.requestBodies ?? {});
-    for (const methods of Object.values((spec.paths ?? {}) as Record<string, SpecObject>)) {
+const asObject = (value: unknown): SpecObject | undefined =>
+    typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as SpecObject) : undefined;
+
+function operationsOf(spec: SpecObject): SpecObject[] {
+    const operations: SpecObject[] = [];
+    for (const pathItem of Object.values(asObject(spec.paths) ?? {})) {
         for (const method of HTTP_METHODS) {
-            bodies.push((methods?.[method] as SpecObject | undefined)?.requestBody);
+            const operation = asObject(asObject(pathItem)?.[method]);
+            if (operation) operations.push(operation);
         }
     }
-    return bodies.map(body => (body as { content?: MediaContent } | undefined)?.content).filter((content): content is MediaContent => !!content);
+    return operations;
+}
+
+/** Request body content maps from operations and from `components.requestBodies`. */
+function requestBodyContents(spec: SpecObject): MediaContent[] {
+    const bodies = [
+        ...operationsOf(spec).map(operation => operation.requestBody),
+        ...Object.values(asObject(asObject(spec.components)?.requestBodies) ?? {})
+    ];
+    return bodies.map(body => asObject(asObject(body)?.content) as MediaContent | undefined).filter((content): content is MediaContent => !!content);
 }
 
 /**
@@ -407,84 +418,112 @@ function collectRequestBodies(spec: SpecObject): MediaContent[] {
  * Point the JSON variant at the multipart schema instead: the SDK still sends JSON, and
  * the runtime switches to multipart once a file value is present.
  */
-function alignJsonBodiesWithMultipart(requestBodies: MediaContent[]): boolean {
+function alignJsonBodiesWithMultipart(spec: SpecObject): boolean {
     let changed = false;
-    for (const content of requestBodies) {
+    for (const content of requestBodyContents(spec)) {
         const multipartSchema = content['multipart/form-data']?.schema;
         const json = content['application/json'];
         if (multipartSchema && json && !isDeepStrictEqual(json.schema, multipartSchema)) {
-            json.schema = multipartSchema;
+            json.schema = structuredClone(multipartSchema);
             changed = true;
+        }
+    }
+    return changed;
+}
+
+const schemaRefName = (ref: unknown) =>
+    typeof ref === 'string' && ref.startsWith('#/components/schemas/') ? ref.slice('#/components/schemas/'.length) : undefined;
+
+/**
+ * Marks the file fields of multipart request bodies so binaryUploadType widens them:
+ * top-level binary properties and arrays of them, which is what the runtime sends as file
+ * parts. A component schema is only marked if nothing besides request bodies references
+ * it, so schemas shared with responses keep their types.
+ */
+function markUploadFields(spec: SpecObject): boolean {
+    const schemas = asObject(asObject(spec.components)?.schemas) ?? {};
+
+    const reachableFrom = (roots: unknown[]) => {
+        const refs = new Set<string>();
+        for (const root of roots) collectRefs(root, refs);
+        let size = -1;
+        while (refs.size !== size) {
+            size = refs.size;
+            for (const ref of [...refs]) collectRefs(schemas[schemaRefName(ref) ?? ''], refs);
+        }
+        return refs;
+    };
+
+    // Everything that can reference a schema, other than request bodies.
+    const components = asObject(spec.components) ?? {};
+    const nonRequestRoots: unknown[] = [components.responses, components.parameters, components.headers, components.callbacks, spec.webhooks];
+    for (const pathItem of Object.values(asObject(spec.paths) ?? {})) {
+        nonRequestRoots.push(asObject(pathItem)?.parameters);
+    }
+    for (const operation of operationsOf(spec)) {
+        const { requestBody: _requestBody, ...rest } = operation;
+        nonRequestRoots.push(rest);
+    }
+    const sharedRefs = reachableFrom(nonRequestRoots);
+
+    let changed = false;
+    for (const content of requestBodyContents(spec)) {
+        const root = content['multipart/form-data']?.schema;
+        const refName = schemaRefName(asObject(root)?.$ref);
+        if (refName && sharedRefs.has(`#/components/schemas/${refName}`)) continue;
+
+        const properties = asObject(asObject(refName ? schemas[refName] : root)?.properties);
+        for (const property of Object.values(properties ?? {})) {
+            const field = asObject(property);
+            const fileSchema = field?.type === 'array' ? asObject(field.items) : field;
+            if (fileSchema && markBinarySchema(fileSchema)) changed = true;
         }
     }
     return changed;
 }
 
 /**
- * Marks binary fields in request body schemas so binaryUploadType widens them. A
- * component schema is marked only if nothing outside request bodies references it, so
- * shared and response schemas keep their types.
+ * Marks `schema` in place as an upload field if it is a binary string. Nullable forms are
+ * spelled as an anyOf whose string member carries the marker, because hey-api splits them
+ * into one schema per type and drops extensions on the way.
  */
-function markUploadFields(spec: SpecObject, requestBodies: MediaContent[]): boolean {
-    const schemas = ((spec.components as SpecObject | undefined)?.schemas ?? {}) as Record<string, unknown>;
-    const reachable = (roots: unknown[]) => {
-        const refs = new Set<string>();
-        for (const root of roots) collectRefs(root, refs);
-        let size = -1;
-        while (refs.size !== size) {
-            size = refs.size;
-            for (const ref of [...refs]) collectRefs(schemas[ref.replace('#/components/schemas/', '')], refs);
-        }
-        return refs;
-    };
+function markBinarySchema(schema: SpecObject): boolean {
+    if (schema.format !== 'binary') return false;
+    const types = Array.isArray(schema.type) ? (schema.type as string[]) : [schema.type];
+    if (!types.includes('string')) return false;
 
-    const requestRoots = requestBodies.flatMap(content => Object.values(content).map(media => media.schema));
-    const requestRefs = reachable(requestRoots);
-    const otherRefs = reachable([
-        withoutRequestBodies(spec.paths),
-        withoutRequestBodies((spec.components as SpecObject | undefined)?.responses),
-        (spec.components as SpecObject | undefined)?.parameters,
-        (spec.components as SpecObject | undefined)?.headers
-    ]);
+    const fileSchema = { type: 'string', format: 'binary', [UPLOAD_FIELD_EXTENSION]: true };
+    const { type: _type, format: _format, ...rest } = schema;
 
-    let changed = false;
-    const mark = (node: unknown) => {
-        if (typeof node !== 'object' || node === null) return;
-        if (Array.isArray(node)) return node.forEach(mark);
-        const obj = node as SpecObject;
-        if (obj.format === 'binary' && obj.type === 'string') {
-            obj[UPLOAD_FIELD_EXTENSION] = true;
-            changed = true;
-        } else if (obj.format === 'binary' && Array.isArray(obj.type) && obj.type.includes('string')) {
-            // OpenAPI 3.1 nullable fields (`type: [string, 'null']`) are split into one schema
-            // per type, which drops the marker. Spell them as the equivalent anyOf instead.
-            obj.anyOf = obj.type.map(type => (type === 'string' ? { type, format: 'binary', [UPLOAD_FIELD_EXTENSION]: true } : { type }));
-            delete obj.type;
-            delete obj.format;
-            changed = true;
-            return;
-        }
-        for (const [key, value] of Object.entries(obj)) {
-            if (key !== '$ref') mark(value);
-        }
-    };
-
-    requestRoots.forEach(mark);
-    for (const ref of requestRefs) {
-        if (!otherRefs.has(ref)) mark(schemas[ref.replace('#/components/schemas/', '')]);
+    if (Array.isArray(schema.type) && schema.type.length > 1) {
+        // OpenAPI 3.1: type: [string, 'null']
+        Object.assign(schema, { ...rest, anyOf: types.map(type => (type === 'string' ? fileSchema : { type })) });
+        delete schema.type;
+        delete schema.format;
+    } else if (schema.nullable === true) {
+        // OpenAPI 3.0: nullable: true
+        Object.assign(schema, { ...rest, anyOf: [fileSchema] });
+        delete schema.type;
+        delete schema.format;
+    } else {
+        schema[UPLOAD_FIELD_EXTENSION] = true;
     }
-    return changed;
+    return true;
 }
 
-/** A deep view of `node` without any `requestBody` members, for finding non-request references. */
-function withoutRequestBodies(node: unknown): unknown {
-    if (typeof node !== 'object' || node === null) return node;
-    if (Array.isArray(node)) return node.map(withoutRequestBodies);
-    return Object.fromEntries(
-        Object.entries(node as SpecObject)
-            .filter(([key]) => key !== 'requestBody')
-            .map(([key, value]) => [key, withoutRequestBodies(value)])
-    );
+/** Rewrites relative external `$ref`s to absolute ones, so the spec can move directories. */
+function rebaseExternalRefs(node: unknown, refBase: string): void {
+    if (typeof node !== 'object' || node === null) return;
+    if (Array.isArray(node)) return node.forEach(item => rebaseExternalRefs(item, refBase));
+
+    const obj = node as SpecObject;
+    for (const [key, value] of Object.entries(obj)) {
+        if (key === '$ref' && typeof value === 'string' && !value.startsWith('#') && !/^[a-z][a-z0-9+.-]*:/i.test(value) && !isAbsolute(value)) {
+            obj[key] = resolve(refBase, value);
+        } else {
+            rebaseExternalRefs(value, refBase);
+        }
+    }
 }
 
 function collectRefs(obj: unknown, refs: Set<string>): void {
