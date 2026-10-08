@@ -143,6 +143,8 @@ describe('E2E: OpenAPI Client Codegen', () => {
         const types = readFileSync(path.join(OUT_PATH, 'types.gen.ts'), 'utf8');
 
         assert.match(types.slice(types.indexOf('export type UploadRawData')), /^export type UploadRawData = \{\n {4}body: Blob \| File;/);
+        // A response references a field of an inline multipart schema by JSON pointer.
+        assert.match(types.slice(types.indexOf('export type StampUpload = ')), /^export type StampUpload = \{\n {4}stamp\?: Blob \| File;/);
         // A response references one of its properties directly.
         assert.match(types.slice(types.indexOf('export type Thumbnail = ')), /^export type Thumbnail = \{\n {4}image\?: Blob \| File;/);
         // Also nested inside another request body, where the runtime can't upload it.
@@ -155,6 +157,24 @@ describe('E2E: OpenAPI Client Codegen', () => {
             /^export type DownloadFileResponses = \{[^}]*200: Blob \| File;/
         );
         assert.match(types.slice(types.indexOf('export type Document = ')), /^export type Document = \{\n {4}contents\?: Blob \| File;/);
+    });
+
+    it('accepts a JSON spec with a UTF-8 byte order mark', async () => {
+        const dir = mkdtempSync(path.join(tmpdir(), 'codegen-bom-'));
+        const outPath = path.join(dir, 'generated');
+        const spec = {
+            openapi: '3.0.3',
+            info: { title: 'BOM', version: '1' },
+            paths: {},
+            components: { schemas: { Pet: { type: 'object', properties: { name: { type: 'string' } } } } }
+        };
+        writeFileSync(path.join(dir, 'spec.json'), `\uFEFF${JSON.stringify(spec)}`);
+        try {
+            await generateOpenapiClient(path.join(dir, 'spec.json'), outPath);
+            assert.match(readFileSync(path.join(outPath, 'types.gen.ts'), 'utf8'), /export type Pet = \{/);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
     });
 
     it('accepts YAML that reuses an anchor more than 100 times', async () => {

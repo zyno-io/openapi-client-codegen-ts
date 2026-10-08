@@ -242,7 +242,32 @@ paths:
             application/octet-stream:
               schema:
                 $ref: '#/components/schemas/Thumbnail/properties/image'
+  /stamps:
+    post:
+      operationId: uploadStamp
+      tags:
+        - requests
+      requestBody:
+        $ref: '#/components/requestBodies/StampUpload'
+      responses:
+        '200':
+          description: The stored stamp
+          content:
+            application/octet-stream:
+              schema:
+                $ref: '#/components/requestBodies/StampUpload/content/multipart~1form-data/schema/properties/stamp'
 components:
+  requestBodies:
+    StampUpload:
+      required: true
+      content:
+        multipart/form-data:
+          schema:
+            type: object
+            properties:
+              stamp:
+                type: string
+                format: binary
   schemas:
     Thumbnail:
       type: object

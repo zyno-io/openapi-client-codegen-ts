@@ -376,7 +376,9 @@ function prepareSpecForGeneration(specPath: string, refBase: string): string | u
     // Round-trip through JSON so YAML aliases become separate objects: marking a request
     // schema must not also mark a response that aliased it.
     // No alias limit: hey-api's own YAML parser has none, so specs it accepts must parse here too.
-    const parsed = isJson ? JSON.parse(readFileSync(specPath, 'utf8')) : parseYaml(readFileSync(specPath, 'utf8'), { maxAliasCount: -1 });
+    // Strip a UTF-8 BOM, which hey-api's own JSON parser tolerates.
+    const text = readFileSync(specPath, 'utf8').replace(/^\uFEFF/, '');
+    const parsed = isJson ? JSON.parse(text) : parseYaml(text, { maxAliasCount: -1 });
     const spec = JSON.parse(JSON.stringify(parsed));
 
     // Mark first, so a JSON variant aligned to an inline multipart schema copies the markers.
@@ -399,24 +401,30 @@ const HTTP_METHODS = ['get', 'put', 'post', 'delete', 'options', 'head', 'patch'
 const asObject = (value: unknown): SpecObject | undefined =>
     typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as SpecObject) : undefined;
 
-function operationsOf(spec: SpecObject): SpecObject[] {
-    const operations: SpecObject[] = [];
-    for (const pathItem of Object.values(asObject(spec.paths) ?? {})) {
-        for (const method of HTTP_METHODS) {
-            const operation = asObject(asObject(pathItem)?.[method]);
-            if (operation) operations.push(operation);
-        }
-    }
-    return operations;
+const escapePointer = (segment: string) => segment.replace(/~/g, '~0').replace(/\//g, '~1');
+
+interface IRequestBodyContent {
+    content: MediaContent;
+    /** JSON pointer to the content map, e.g. `#/paths/~1uploads/post/requestBody/content`. */
+    pointer: string;
 }
 
 /** Request body content maps from operations and from `components.requestBodies`. */
-function requestBodyContents(spec: SpecObject): MediaContent[] {
-    const bodies = [
-        ...operationsOf(spec).map(operation => operation.requestBody),
-        ...Object.values(asObject(asObject(spec.components)?.requestBodies) ?? {})
-    ];
-    return bodies.map(body => asObject(asObject(body)?.content) as MediaContent | undefined).filter((content): content is MediaContent => !!content);
+function requestBodyContents(spec: SpecObject): IRequestBodyContent[] {
+    const bodies: { body: unknown; pointer: string }[] = [];
+    for (const [path, pathItem] of Object.entries(asObject(spec.paths) ?? {})) {
+        for (const method of HTTP_METHODS) {
+            const operation = asObject(asObject(pathItem)?.[method]);
+            if (operation) bodies.push({ body: operation.requestBody, pointer: `#/paths/${escapePointer(path)}/${method}/requestBody` });
+        }
+    }
+    for (const [name, body] of Object.entries(asObject(asObject(spec.components)?.requestBodies) ?? {})) {
+        bodies.push({ body, pointer: `#/components/requestBodies/${escapePointer(name)}` });
+    }
+    return bodies.flatMap(({ body, pointer }) => {
+        const content = asObject(asObject(body)?.content) as MediaContent | undefined;
+        return content ? [{ content, pointer: `${pointer}/content` }] : [];
+    });
 }
 
 /**
@@ -427,7 +435,7 @@ function requestBodyContents(spec: SpecObject): MediaContent[] {
  */
 function alignJsonBodiesWithMultipart(spec: SpecObject): boolean {
     let changed = false;
-    for (const content of requestBodyContents(spec)) {
+    for (const { content } of requestBodyContents(spec)) {
         const multipartSchema = content['multipart/form-data']?.schema;
         const json = content['application/json'];
         if (multipartSchema && json && !isDeepStrictEqual(json.schema, multipartSchema)) {
@@ -462,8 +470,9 @@ function markUploadFields(spec: SpecObject): boolean {
     const contents = requestBodyContents(spec);
 
     const allRefs = countSchemaRefs(spec);
+    const allRefStrings = collectRefStrings(spec);
     const bodyRefs = new Map<string, number>();
-    for (const content of contents) {
+    for (const { content } of contents) {
         for (const media of Object.values(content)) {
             const name = schemaRefName(asObject(media?.schema)?.$ref);
             if (name) bodyRefs.set(name, (bodyRefs.get(name) ?? 0) + 1);
@@ -471,10 +480,13 @@ function markUploadFields(spec: SpecObject): boolean {
     }
 
     let changed = false;
-    for (const content of contents) {
+    for (const { content, pointer } of contents) {
         const root = asObject(content['multipart/form-data']?.schema);
         const refName = schemaRefName(root?.$ref);
         if (refName && allRefs.get(refName) !== bodyRefs.get(refName)) continue;
+        // An inline schema that something references into (by JSON pointer) is shared too.
+        const inlinePointer = `${pointer}/${escapePointer('multipart/form-data')}/schema`;
+        if (!refName && allRefStrings.some(ref => ref === inlinePointer || ref.startsWith(`${inlinePointer}/`))) continue;
 
         const properties = asObject(asObject(refName ? schemas[refName] : root)?.properties);
         for (const property of Object.values(properties ?? {})) {
@@ -484,6 +496,16 @@ function markUploadFields(spec: SpecObject): boolean {
         }
     }
     return changed;
+}
+
+/** Every `$ref` string in the spec. */
+function collectRefStrings(node: unknown, refs: string[] = []): string[] {
+    if (typeof node !== 'object' || node === null) return refs;
+    for (const [key, value] of Object.entries(node as SpecObject)) {
+        if (key === '$ref' && typeof value === 'string') refs.push(value);
+        else collectRefStrings(value, refs);
+    }
+    return refs;
 }
 
 /** Counts `$ref`s to or into each component schema, anywhere in the spec. */
