@@ -169,6 +169,30 @@ paths:
                 properties:
                   requestBody:
                     $ref: '#/components/schemas/AuditedUpload'
+  /scans:
+    post:
+      operationId: uploadScan
+      tags:
+        - requests
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                scan: &scanFile
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: The processed scan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  processed: *scanFile
 components:
   schemas:
     AuditedUpload:

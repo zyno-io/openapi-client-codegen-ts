@@ -124,9 +124,18 @@ describe('E2E: OpenAPI Client Codegen', () => {
         assert.match(types, /attachments\?: Array<Blob \| File \| FileUploadValue>;/);
     });
 
-    it('marks OpenAPI 3.0 nullable upload fields', () => {
+    it('marks OpenAPI 3.0 nullable upload fields, keeping the exported schema nullable', async () => {
         const types = readFileSync(path.join(OUT_PATH, 'types.gen.ts'), 'utf8');
         assert.match(types, /receipt\?: Blob \| File \| FileUploadValue \| null;/);
+
+        const { CreateRequestRequestSchema } = await import('./generated/schemas.gen.js');
+        assert.deepEqual(CreateRequestRequestSchema.properties.receipt.anyOf[1], { nullable: true, enum: [null] });
+    });
+
+    it('does not mark response fields that alias a request field in YAML', () => {
+        const types = readFileSync(path.join(OUT_PATH, 'types.gen.ts'), 'utf8');
+        assert.match(types, /scan\?: Blob \| File \| FileUploadValue;/);
+        assert.match(types, /processed\?: Blob \| File;/);
     });
 
     it('keeps Blob | File for downloads, raw binary bodies, and schemas shared with responses', () => {
@@ -144,7 +153,8 @@ describe('E2E: OpenAPI Client Codegen', () => {
     });
 
     it('resolves relative $refs and leaves no adjusted spec behind', async () => {
-        const specDir = path.join(import.meta.dirname, 'relative-refs');
+        // The space and `#` check that relocated references still find the right directory.
+        const specDir = path.join(import.meta.dirname, 'relative refs #1');
         const outPath = path.join(import.meta.dirname, 'generated-relative-refs');
         rmSync(outPath, { recursive: true, force: true });
 

@@ -3,7 +3,8 @@ import { createHash } from 'node:crypto';
 import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, watch, writeFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 
@@ -370,7 +371,10 @@ function filterSpecByOperations(originalPath: string, content: string, operation
  */
 function prepareSpecForGeneration(specPath: string, refBase: string): string | undefined {
     const isJson = specPath.endsWith('.json');
-    const spec = isJson ? JSON.parse(readFileSync(specPath, 'utf8')) : parseYaml(readFileSync(specPath, 'utf8'));
+    // Round-trip through JSON so YAML aliases become separate objects: marking a request
+    // schema must not also mark a response that aliased it.
+    const parsed = isJson ? JSON.parse(readFileSync(specPath, 'utf8')) : parseYaml(readFileSync(specPath, 'utf8'));
+    const spec = JSON.parse(JSON.stringify(parsed));
 
     // Mark first, so a JSON variant aligned to an inline multipart schema copies the markers.
     const marked = markUploadFields(spec);
@@ -501,10 +505,12 @@ function markBinarySchema(schema: SpecObject): boolean {
         delete schema.type;
         delete schema.format;
     } else if (schema.nullable === true) {
-        // OpenAPI 3.0: nullable: true
-        Object.assign(schema, { ...rest, anyOf: [fileSchema] });
+        // OpenAPI 3.0: nullable: true, spelled with 3.0's form of a null type.
+        const { nullable: _nullable, ...restWithoutNullable } = rest;
+        Object.assign(schema, { ...restWithoutNullable, anyOf: [fileSchema, { nullable: true, enum: [null] }] });
         delete schema.type;
         delete schema.format;
+        delete schema.nullable;
     } else {
         schema[UPLOAD_FIELD_EXTENSION] = true;
     }
@@ -518,8 +524,12 @@ function rebaseExternalRefs(node: unknown, refBase: string): void {
 
     const obj = node as SpecObject;
     for (const [key, value] of Object.entries(obj)) {
-        if (key === '$ref' && typeof value === 'string' && !value.startsWith('#') && !/^[a-z][a-z0-9+.-]*:/i.test(value) && !isAbsolute(value)) {
-            obj[key] = resolve(refBase, value);
+        if (key === '$ref' && typeof value === 'string' && !value.startsWith('#') && !/^[a-z][a-z0-9+.-]*:/i.test(value)) {
+            // A file URL, so characters such as `#` in directory names stay part of the path.
+            const fragmentStart = value.indexOf('#');
+            const filePart = fragmentStart === -1 ? value : value.slice(0, fragmentStart);
+            const fragment = fragmentStart === -1 ? '' : value.slice(fragmentStart);
+            obj[key] = pathToFileURL(resolve(refBase, decodeURI(filePart))).href + fragment;
         } else {
             rebaseExternalRefs(value, refBase);
         }
