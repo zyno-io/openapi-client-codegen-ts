@@ -142,6 +142,8 @@ describe('E2E: OpenAPI Client Codegen', () => {
         const types = readFileSync(path.join(OUT_PATH, 'types.gen.ts'), 'utf8');
 
         assert.match(types.slice(types.indexOf('export type UploadRawData')), /^export type UploadRawData = \{\n {4}body: Blob \| File;/);
+        // Also nested inside another request body, where the runtime can't upload it.
+        assert.match(types.slice(types.indexOf('export type BatchItem = ')), /^export type BatchItem = \{\n {4}file\?: Blob \| File;/);
         // Referenced from a response property that happens to be named requestBody.
         assert.match(types.slice(types.indexOf('export type AuditedUpload = ')), /^export type AuditedUpload = \{\n {4}file\?: Blob \| File;/);
 

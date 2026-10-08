@@ -193,8 +193,45 @@ paths:
                 type: object
                 properties:
                   processed: *scanFile
+  /batches:
+    post:
+      operationId: uploadBatchItem
+      tags:
+        - requests
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BatchItem'
+      responses:
+        '204':
+          description: Stored
+  /batches/describe:
+    post:
+      operationId: describeBatch
+      tags:
+        - requests
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                first:
+                  $ref: '#/components/schemas/BatchItem'
+      responses:
+        '204':
+          description: Described
 components:
   schemas:
+    BatchItem:
+      type: object
+      properties:
+        file:
+          type: string
+          format: binary
     AuditedUpload:
       type: object
       properties:

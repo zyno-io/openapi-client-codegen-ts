@@ -24,8 +24,43 @@ paths:
                   - string
                   - 'null'
                 format: binary
+  /exports:
+    post:
+      operationId: createExport
+      tags:
+        - avatars
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ExportFile'
+      responses:
+        '204':
+          description: Created
+  /exports/latest:
+    $ref: '#/components/pathItems/LatestExport'
 components:
+  pathItems:
+    LatestExport:
+      get:
+        operationId: getLatestExport
+        tags:
+          - avatars
+        responses:
+          '200':
+            description: The latest export
+            content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/ExportFile'
   schemas:
+    ExportFile:
+      type: object
+      properties:
+        contents:
+          type: string
+          format: binary
     SetAvatarInput:
       type: object
       properties:

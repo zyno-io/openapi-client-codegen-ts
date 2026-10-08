@@ -441,40 +441,28 @@ const schemaRefName = (ref: unknown) =>
 /**
  * Marks the file fields of multipart request bodies so binaryUploadType widens them:
  * top-level binary properties and arrays of them, which is what the runtime sends as file
- * parts. A component schema is only marked if nothing besides request bodies references
- * it, so schemas shared with responses keep their types.
+ * parts. A component schema is only marked if every reference to it anywhere in the spec
+ * is the schema of a request body itself, so schemas used in responses, nested in other
+ * schemas, or anywhere else keep their types.
  */
 function markUploadFields(spec: SpecObject): boolean {
     const schemas = asObject(asObject(spec.components)?.schemas) ?? {};
+    const contents = requestBodyContents(spec);
 
-    const reachableFrom = (roots: unknown[]) => {
-        const refs = new Set<string>();
-        for (const root of roots) collectRefs(root, refs);
-        let size = -1;
-        while (refs.size !== size) {
-            size = refs.size;
-            for (const ref of [...refs]) collectRefs(schemas[schemaRefName(ref) ?? ''], refs);
+    const allRefs = countSchemaRefs(spec);
+    const bodyRefs = new Map<string, number>();
+    for (const content of contents) {
+        for (const media of Object.values(content)) {
+            const name = schemaRefName(asObject(media?.schema)?.$ref);
+            if (name) bodyRefs.set(name, (bodyRefs.get(name) ?? 0) + 1);
         }
-        return refs;
-    };
-
-    // Everything that can reference a schema, other than request bodies.
-    const components = asObject(spec.components) ?? {};
-    const nonRequestRoots: unknown[] = [components.responses, components.parameters, components.headers, components.callbacks, spec.webhooks];
-    for (const pathItem of Object.values(asObject(spec.paths) ?? {})) {
-        nonRequestRoots.push(asObject(pathItem)?.parameters);
     }
-    for (const operation of operationsOf(spec)) {
-        const { requestBody: _requestBody, ...rest } = operation;
-        nonRequestRoots.push(rest);
-    }
-    const sharedRefs = reachableFrom(nonRequestRoots);
 
     let changed = false;
-    for (const content of requestBodyContents(spec)) {
-        const root = content['multipart/form-data']?.schema;
-        const refName = schemaRefName(asObject(root)?.$ref);
-        if (refName && sharedRefs.has(`#/components/schemas/${refName}`)) continue;
+    for (const content of contents) {
+        const root = asObject(content['multipart/form-data']?.schema);
+        const refName = schemaRefName(root?.$ref);
+        if (refName && allRefs.get(refName) !== bodyRefs.get(refName)) continue;
 
         const properties = asObject(asObject(refName ? schemas[refName] : root)?.properties);
         for (const property of Object.values(properties ?? {})) {
@@ -484,6 +472,17 @@ function markUploadFields(spec: SpecObject): boolean {
         }
     }
     return changed;
+}
+
+/** Counts `$ref`s to each component schema, anywhere in the spec. */
+function countSchemaRefs(node: unknown, counts = new Map<string, number>()): Map<string, number> {
+    if (typeof node !== 'object' || node === null) return counts;
+    for (const [key, value] of Object.entries(node as SpecObject)) {
+        const name = key === '$ref' ? schemaRefName(value) : undefined;
+        if (name) counts.set(name, (counts.get(name) ?? 0) + 1);
+        else countSchemaRefs(value, counts);
+    }
+    return counts;
 }
 
 /**
