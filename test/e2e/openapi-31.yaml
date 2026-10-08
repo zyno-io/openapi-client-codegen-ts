@@ -1,0 +1,36 @@
+openapi: 3.1.0
+info:
+  title: OpenAPI 3.1 uploads
+  version: '1'
+paths:
+  /avatars:
+    post:
+      operationId: setAvatar
+      tags:
+        - avatars
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SetAvatarInput'
+      responses:
+        '200':
+          description: The previous avatar, if any
+          content:
+            application/octet-stream:
+              schema:
+                type:
+                  - string
+                  - 'null'
+                format: binary
+components:
+  schemas:
+    SetAvatarInput:
+      type: object
+      properties:
+        avatar:
+          type:
+            - string
+            - 'null'
+          format: binary

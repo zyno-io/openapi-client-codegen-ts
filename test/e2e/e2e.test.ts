@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import path from 'node:path';
 import { describe, it, before } from 'node:test';
@@ -122,6 +122,45 @@ describe('E2E: OpenAPI Client Codegen', () => {
         assert.match(types, /import type \{ FileUploadValue \} from '@zyno-io\/openapi-client-codegen';/);
         assert.match(types, /photo\?: Blob \| File \| FileUploadValue;/);
         assert.match(types, /attachments\?: Array<Blob \| File \| FileUploadValue>;/);
+    });
+
+    it('keeps Blob | File for downloads and for schemas shared with responses', () => {
+        const types = readFileSync(path.join(OUT_PATH, 'types.gen.ts'), 'utf8');
+
+        assert.match(
+            types.slice(types.indexOf('export type DownloadFileResponses')),
+            /^export type DownloadFileResponses = \{[^}]*200: Blob \| File;/
+        );
+        assert.match(types.slice(types.indexOf('export type Document = ')), /^export type Document = \{\n {4}contents\?: Blob \| File;/);
+    });
+
+    it('resolves relative $refs and leaves no adjusted spec behind', async () => {
+        const specDir = path.join(import.meta.dirname, 'relative-refs');
+        const outPath = path.join(import.meta.dirname, 'generated-relative-refs');
+        rmSync(outPath, { recursive: true, force: true });
+
+        await generateOpenapiClient(path.join(specDir, 'spec.yaml'), outPath);
+
+        // The body is typed from the multipart schema; fields defined in other files aren't
+        // marked as uploads, so they keep hey-api's Blob | File.
+        const types = readFileSync(path.join(outPath, 'types.gen.ts'), 'utf8');
+        assert.match(types, /export type UploadData = \{\n {4}body: UploadRequest;/);
+        assert.match(types, /file\?: Blob \| File;/);
+        assert.deepEqual(readdirSync(specDir).sort(), ['schemas.yaml', 'spec.yaml']);
+    });
+
+    it('marks OpenAPI 3.1 nullable binary upload fields, and only those', async () => {
+        const outPath = path.join(import.meta.dirname, 'generated-openapi-31');
+        rmSync(outPath, { recursive: true, force: true });
+
+        await generateOpenapiClient(path.join(import.meta.dirname, 'openapi-31.yaml'), outPath);
+
+        const types = readFileSync(path.join(outPath, 'types.gen.ts'), 'utf8');
+        assert.match(types, /avatar\?: Blob \| File \| FileUploadValue \| null;/);
+        assert.match(
+            types.slice(types.indexOf('export type SetAvatarResponses')),
+            /^export type SetAvatarResponses = \{[^}]*200: Blob \| File \| null;/
+        );
     });
 
     it('types a body from its multipart schema when the JSON variant omits file fields', () => {

@@ -96,8 +96,51 @@ paths:
       responses:
         '204':
           description: Message sent
+  /files/{id}:
+    get:
+      operationId: downloadFile
+      tags:
+        - requests
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: File contents
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+  /documents:
+    put:
+      operationId: replaceDocument
+      tags:
+        - requests
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Document'
+      responses:
+        '200':
+          description: The stored document
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
 components:
   schemas:
+    Document:
+      type: object
+      properties:
+        contents:
+          type: string
+          format: binary
     Pet:
       type: object
       required:
