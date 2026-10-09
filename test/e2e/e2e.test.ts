@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { chmodSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -137,6 +137,56 @@ describe('E2E: OpenAPI Client Codegen', () => {
         const types = readFileSync(path.join(OUT_PATH, 'types.gen.ts'), 'utf8');
         assert.match(types, /scan\?: Blob \| File \| FileUploadValue;/);
         assert.match(types, /processed\?: Blob \| File;/);
+    });
+
+    for (const filtered of [false, true]) {
+        it(`resolves YAML merges before marking upload fields${filtered ? ' with operation filtering' : ''}`, async () => {
+            const dir = mkdtempSync(path.join(tmpdir(), 'codegen-merges-'));
+            const outPath = path.join(dir, 'generated');
+            try {
+                await generateOpenapiClient(path.join(import.meta.dirname, 'yaml-merges.yaml'), outPath, filtered ? ['uploadFiles'] : undefined);
+                const types = readFileSync(path.join(outPath, 'types.gen.ts'), 'utf8');
+                const uploadType = types.slice(types.indexOf('export type Upload = '), types.indexOf('export type UploadFilesData'));
+                assert.match(uploadType, /attachment\?: Blob \| File \| FileUploadValue;/);
+                assert.match(uploadType, /attachments\?: Array<Blob \| File \| FileUploadValue>;/);
+                assert.match(uploadType, /overridden\?: string;/);
+                assert.match(types, /export type UploadFilesData = \{\n {4}body: Upload;/);
+
+                if (filtered) {
+                    assert.ok(!types.includes('DownloadFilesResponses'));
+                } else {
+                    const responseTypes = types.slice(types.indexOf('export type DownloadFilesResponses'));
+                    assert.match(responseTypes, /attachment\?: Blob \| File;/);
+                    assert.match(responseTypes, /attachments\?: Array<Blob \| File>;/);
+                    assert.ok(!responseTypes.includes('FileUploadValue'));
+                }
+            } finally {
+                rmSync(dir, { recursive: true, force: true });
+            }
+        });
+    }
+
+    it('regenerates cached upload types from generator version 2', async () => {
+        const dir = mkdtempSync(path.join(tmpdir(), 'codegen-previous-version-'));
+        const outPath = path.join(dir, 'generated');
+        const specPath = path.join(import.meta.dirname, 'yaml-merges.yaml');
+        try {
+            mkdirSync(outPath);
+            writeFileSync(path.join(outPath, 'types.gen.ts'), 'cached SDK without upload helpers');
+            writeFileSync(
+                path.join(outPath, '.openapi-client-codegen.hash'),
+                JSON.stringify({
+                    version: 2,
+                    yamlHash: createHash('sha256').update(readFileSync(specPath, 'utf8')).digest('hex'),
+                    prefix: '',
+                    operations: []
+                })
+            );
+            await generateOpenapiClient(specPath, outPath);
+            assert.match(readFileSync(path.join(outPath, 'types.gen.ts'), 'utf8'), /attachment\?: Blob \| File \| FileUploadValue;/);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
     });
 
     it('keeps Blob | File for downloads, raw binary bodies, and schemas shared with responses', () => {

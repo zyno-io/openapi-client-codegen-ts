@@ -183,7 +183,7 @@ interface IGenerationState {
 }
 
 // Bump when generator output changes for the same input, so existing SDKs regenerate.
-const GENERATION_STATE_VERSION = 2;
+const GENERATION_STATE_VERSION = 3;
 
 function createGenerationState(yaml: string, prefix: string, operations: string[] | undefined): IGenerationState {
     return {
@@ -278,9 +278,15 @@ function resolveOperations(config: string | IGeneratorConfig, override: string |
  * Spec Filtering
  */
 
+/** Match hey-api's parsing of BOM-prefixed JSON, YAML merges, and unrestricted aliases. */
+function parseSpec(content: string, isJson: boolean) {
+    const text = content.replace(/^\uFEFF/, '');
+    return isJson ? JSON.parse(text) : parseYaml(text, { maxAliasCount: -1, merge: true });
+}
+
 function filterSpecByOperations(originalPath: string, content: string, operationIds: string[]): string {
     const isJson = originalPath.endsWith('.json');
-    const spec = isJson ? JSON.parse(content) : parseYaml(content);
+    const spec = parseSpec(content, isJson);
     const operationSet = new Set(operationIds);
 
     const filteredPaths: Record<string, Record<string, unknown>> = {};
@@ -375,10 +381,7 @@ function prepareSpecForGeneration(specPath: string, refBase: string): string | u
     const isJson = specPath.endsWith('.json');
     // Round-trip through JSON so YAML aliases become separate objects: marking a request
     // schema must not also mark a response that aliased it.
-    // No alias limit: hey-api's own YAML parser has none, so specs it accepts must parse here too.
-    // Strip a UTF-8 BOM, which hey-api's own JSON parser tolerates.
-    const text = readFileSync(specPath, 'utf8').replace(/^\uFEFF/, '');
-    const parsed = isJson ? JSON.parse(text) : parseYaml(text, { maxAliasCount: -1 });
+    const parsed = parseSpec(readFileSync(specPath, 'utf8'), isJson);
     const spec = JSON.parse(JSON.stringify(parsed));
 
     // Mark first, so a JSON variant aligned to an inline multipart schema copies the markers.

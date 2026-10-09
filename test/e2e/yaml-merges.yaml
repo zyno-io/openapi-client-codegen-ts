@@ -1,0 +1,63 @@
+openapi: 3.0.3
+info:
+  title: YAML merge uploads
+  version: '1'
+x-file-properties: &fileProperties
+  attachment:
+    type: string
+    format: binary
+  attachments:
+    type: array
+    items:
+      type: string
+      format: binary
+  overridden:
+    type: string
+    format: binary
+paths:
+  /uploads:
+    post:
+      <<:
+        operationId: uploadFiles
+        tags:
+          - uploads
+        requestBody:
+          required: true
+          content:
+            multipart/form-data:
+              schema:
+                $ref: '#/components/schemas/Upload'
+            application/json:
+              schema:
+                type: object
+                properties:
+                  description:
+                    type: string
+        responses:
+          '204':
+            description: Uploaded
+  /downloads:
+    get:
+      operationId: downloadFiles
+      tags:
+        - uploads
+      responses:
+        '200':
+          description: Downloaded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  <<: *fileProperties
+components:
+  schemas:
+    Upload:
+      <<:
+        type: object
+        properties:
+          <<: *fileProperties
+          overridden:
+            type: string
+          description:
+            type: string
