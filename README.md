@@ -19,7 +19,7 @@ A TypeScript library that wraps [@hey-api/openapi-ts](https://heyapi.dev/) to pr
 - **Client configuration** — `configureOpenApiClient()` sets up error handling, dynamic headers, and request middleware in one call.
 - **Structured errors** — Responses are wrapped in `OpenApiError` with access to the request, response, and parsed body, rather than raw fetch errors.
 - **Request middleware** — A wrapper function lets you intercept every request for logging, auth token injection, retry logic, etc.
-- **File uploads** — Browser `Blob`/`File` values and React Native upload helpers, singly or in arrays, automatically convert to multipart/form-data.
+- **File uploads** — Upload browser `Blob`/`File` values or local files in React Native and Expo, including arrays of files.
 - **CLI and watch mode** — A CLI tool and programmatic API for generating clients, with file watching for automatic regeneration during development.
 
 ## Installation
@@ -209,24 +209,39 @@ configureOpenApiClient(client, {
 
 ## File Uploads
 
-Generated multipart upload fields are typed as `Blob | File | FileUploadValue`, where `FileUploadValue` covers this package's `FileUploadRequest` and `ReactNativeFileUploadRequest` helpers. When a Deepkit backend exposes `UploadedFile` parameters, passing any of these converts the request to multipart/form-data, sends file fields as file parts, and moves non-file fields into the `_payload` JSON part expected by Deepkit. An array of files is sent as one part per file under the same field name, in order. Requests with no file values (including empty arrays) stay JSON. When an operation offers both a multipart and a JSON body, the generated body type comes from the multipart schema, so file fields stay typed even if the JSON variant omits them.
+First, [configure the generated client](#configuring-the-generated-client) with `configureOpenApiClient()`. This enables automatic file upload handling for SDK calls.
+
+For Deepkit endpoints with `UploadedFile` parameters, put files in top-level body fields. The runtime sends those fields as multipart file parts and puts the remaining body fields in the `_payload` JSON part expected by Deepkit. It handles the multipart Content-Type and boundary for you.
+
+### Browser
+
+Pass a native `File` or `Blob` directly:
+
+```typescript
+import { ReportsApi } from './generated/sdk.gen';
+
+// pdfBlob is an existing Blob, for example from a downloaded or generated PDF.
+const pdfFile = new File([pdfBlob], 'report.pdf', { type: 'application/pdf' });
+await ReportsApi.postReportsUpload({
+    body: {
+        title: 'Q4 Report',
+        pdf: pdfFile
+    }
+});
+```
+
+The SDK class, method, and field names in these examples depend on your API spec.
+
+### Expo and React Native
+
+Wrap a local file URI in `ReactNativeFileUploadRequest`. When using `expo/fetch`, also provide a `bytes` callback so Expo can read the file's contents. This example uses [`File.bytes()` from expo-file-system](https://docs.expo.dev/versions/latest/sdk/filesystem/#bytes):
 
 ```typescript
 import { ReactNativeFileUploadRequest } from '@zyno-io/openapi-client-codegen';
 import { File as ExpoFile } from 'expo-file-system';
+import { ProfileApi } from './generated/sdk.gen';
 
-// Browser — pass a File or Blob directly
-const pdfFile = new File([pdfBlob], 'report.pdf', { type: 'application/pdf' });
-const result = dataFrom(
-    await ReportsApi.postReportsUpload({
-        body: {
-            title: 'Q4 Report',
-            pdf: pdfFile
-        }
-    })
-);
-
-// React Native — pass a file URI helper, or an array of them for a repeated field
+// photo.uri is a local file URI, for example from an image picker.
 await ProfileApi.postProfileUploadPhoto({
     body: {
         photo: new ReactNativeFileUploadRequest({
@@ -239,7 +254,35 @@ await ProfileApi.postProfileUploadPhoto({
 });
 ```
 
-`bytes` reads the file's contents. It is required when FormData is serialized in JavaScript, as `expo/fetch` (Expo's default global `fetch`) does; without it the upload fails with an error naming the file. React Native's own networking reads `uri` and doesn't need it. `name` and `type` are sent as given, so the part's filename and Content-Type don't depend on the file's extension.
+With React Native's native networking, you can omit `bytes`; it reads the file from `uri`. With `expo/fetch`, a missing `bytes` callback causes an error that identifies the file. Set `name` to the filename the server should receive and `type` to the file's MIME type, such as `image/jpeg`.
+
+### Multiple files
+
+For an array upload field, pass an array of files or upload helpers:
+
+```typescript
+import { MessagesApi } from './generated/sdk.gen';
+
+// firstFile and secondFile are File/Blob values or upload helpers.
+await MessagesApi.sendMessage({
+    body: {
+        textContent: 'Here are the photos',
+        attachments: [firstFile, secondFile]
+    }
+});
+```
+
+Each file is sent under the same field name (`attachments` here), in array order. A file array must contain only files or upload helpers; mixing them with strings, `null`, or other values throws a `TypeError`.
+
+If the endpoint accepts both JSON and multipart, a request without file values uses JSON. Empty arrays such as `attachments: []` stay in the JSON body.
+
+### Generated types
+
+Supported multipart file fields accept `Blob | File | FileUploadValue`; array fields accept an array of those values. `FileUploadValue` is an exported type covering `FileUploadRequest` and `ReactNativeFileUploadRequest`. Fields remain optional or nullable when declared that way in the spec.
+
+When an endpoint accepts both JSON and multipart, the generated body type uses the multipart schema so you can pass file fields even if the JSON schema omits them. Automatic helper typing applies to top-level file fields; shared response schemas, external references, and ambiguous composed schemas keep their original types.
+
+After upgrading this package, rerun client generation to refresh the upload types. The generator invalidates older cached output even if your spec has not changed.
 
 ## Response Utilities
 
