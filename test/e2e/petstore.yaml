@@ -75,8 +75,283 @@ paths:
       responses:
         '204':
           description: Request created
+  /messages:
+    post:
+      operationId: sendMessage
+      tags:
+        - requests
+      summary: Send a message whose JSON variant omits the file fields
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SendMessageRequest'
+          application/json:
+            schema:
+              type: object
+              properties:
+                textContent:
+                  type: string
+      responses:
+        '204':
+          description: Message sent
+  /files/{id}:
+    get:
+      operationId: downloadFile
+      tags:
+        - requests
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: File contents
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+  /documents:
+    put:
+      operationId: replaceDocument
+      tags:
+        - requests
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Document'
+      responses:
+        '200':
+          description: The stored document
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+  /raw:
+    post:
+      operationId: uploadRaw
+      tags:
+        - requests
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '204':
+          description: Stored
+  /audits:
+    post:
+      operationId: auditUpload
+      tags:
+        - requests
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AuditedUpload'
+      responses:
+        '200':
+          description: What was received
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requestBody:
+                    $ref: '#/components/schemas/AuditedUpload'
+  /scans:
+    post:
+      operationId: uploadScan
+      tags:
+        - requests
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                scan: &scanFile
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: The processed scan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  processed: *scanFile
+  /batches:
+    post:
+      operationId: uploadBatchItem
+      tags:
+        - requests
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BatchItem'
+      responses:
+        '204':
+          description: Stored
+  /batches/describe:
+    post:
+      operationId: describeBatch
+      tags:
+        - requests
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                first:
+                  $ref: '#/components/schemas/BatchItem'
+      responses:
+        '204':
+          description: Described
+  /thumbnails:
+    post:
+      operationId: uploadThumbnail
+      tags:
+        - requests
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Thumbnail'
+      responses:
+        '200':
+          description: The stored image
+          content:
+            application/octet-stream:
+              schema:
+                $ref: '#/components/schemas/Thumbnail/properties/image'
+  /thumbnails/latest:
+    get:
+      operationId: getLatestThumbnail
+      tags:
+        - requests
+      responses:
+        '200':
+          description: The latest image, referenced with percent-encoding
+          content:
+            application/octet-stream:
+              schema:
+                $ref: '#/components/schemas/%50oster/properties/image'
+  /posters:
+    post:
+      operationId: uploadPoster
+      tags:
+        - requests
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Poster'
+      responses:
+        '204':
+          description: Stored
+  /stamps:
+    post:
+      operationId: uploadStamp
+      tags:
+        - requests
+      requestBody:
+        $ref: '#/components/requestBodies/StampUpload'
+      responses:
+        '200':
+          description: The stored stamp
+          content:
+            application/octet-stream:
+              schema:
+                $ref: '#/components/requestBodies/StampUpload/content/multipart~1form-data/schema/properties/stamp'
+  /notes:
+    post:
+      operationId: createNote
+      tags:
+        - requests
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                title:
+                  $ref: '#/paths/~1notes/post/requestBody/content/application~1json/schema/properties/title'
+                scan:
+                  type: string
+                  format: binary
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  maxLength: 80
+      responses:
+        '204':
+          description: Created
 components:
+  requestBodies:
+    StampUpload:
+      required: true
+      content:
+        multipart/form-data:
+          schema:
+            type: object
+            properties:
+              stamp:
+                type: string
+                format: binary
   schemas:
+    Poster:
+      type: object
+      properties:
+        image:
+          type: string
+          format: binary
+    Thumbnail:
+      type: object
+      properties:
+        image:
+          type: string
+          format: binary
+    BatchItem:
+      type: object
+      properties:
+        file:
+          type: string
+          format: binary
+    AuditedUpload:
+      type: object
+      properties:
+        file:
+          type: string
+          format: binary
+    Document:
+      type: object
+      properties:
+        contents:
+          type: string
+          format: binary
     Pet:
       type: object
       required:
@@ -111,6 +386,16 @@ components:
           type: string
         name:
           type: string
+    SendMessageRequest:
+      type: object
+      properties:
+        textContent:
+          type: string
+        attachments:
+          type: array
+          items:
+            type: string
+            format: binary
     CreateRequestRequest:
       type: object
       required:
@@ -129,3 +414,12 @@ components:
         photo:
           type: string
           format: binary
+        receipt:
+          type: string
+          format: binary
+          nullable: true
+        attachments:
+          type: array
+          items:
+            type: string
+            format: binary

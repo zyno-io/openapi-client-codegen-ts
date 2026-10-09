@@ -15,5 +15,7 @@ test/e2e/generated-filtered-multi
 test/e2e/generated-filtered-all
 test/e2e/generated-filtered-structure
 test/e2e/generated-filtered-config
+test/e2e/generated-relative-refs
+test/e2e/generated-openapi-31
 
 .serena

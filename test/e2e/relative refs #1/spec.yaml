@@ -1,0 +1,25 @@
+openapi: 3.0.3
+info:
+  title: Relative refs
+  version: '1'
+paths:
+  /uploads:
+    post:
+      operationId: upload
+      tags:
+        - uploads
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: './schemas.yaml#/UploadRequest'
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+      responses:
+        '204':
+          description: Uploaded
